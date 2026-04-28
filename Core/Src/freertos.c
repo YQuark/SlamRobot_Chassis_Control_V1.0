@@ -25,6 +25,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "chassis_tasks.h"
 
 /* USER CODE END Includes */
 
@@ -45,6 +46,41 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN Variables */
+osThreadId_t chassisControlTaskHandle;
+osThreadId_t encoderUpdateTaskHandle;
+osThreadId_t adcMonitorTaskHandle;
+osThreadId_t ledTaskHandle;
+osThreadId_t upperUartTaskHandle;
+
+const osThreadAttr_t chassisControlTask_attributes = {
+  .name = "chassisControl",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityAboveNormal,
+};
+
+const osThreadAttr_t encoderUpdateTask_attributes = {
+  .name = "encoderUpdate",
+  .stack_size = 384 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+const osThreadAttr_t adcMonitorTask_attributes = {
+  .name = "adcMonitor",
+  .stack_size = 384 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
+const osThreadAttr_t ledTask_attributes = {
+  .name = "led",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityLow,
+};
+
+const osThreadAttr_t upperUartTask_attributes = {
+  .name = "upperUart",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 
 /* USER CODE END Variables */
 /* Definitions for systemTask */
@@ -71,6 +107,7 @@ void MX_FREERTOS_Init(void); /* (MISRA C 2004 rule 8.1) */
   */
 void MX_FREERTOS_Init(void) {
   /* USER CODE BEGIN Init */
+  ChassisTasks_InitHardware();
 
   /* USER CODE END Init */
 
@@ -96,6 +133,11 @@ void MX_FREERTOS_Init(void) {
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  chassisControlTaskHandle = osThreadNew(Task_ChassisControl, NULL, &chassisControlTask_attributes);
+  encoderUpdateTaskHandle = osThreadNew(Task_EncoderUpdate, NULL, &encoderUpdateTask_attributes);
+  adcMonitorTaskHandle = osThreadNew(Task_AdcMonitor, NULL, &adcMonitorTask_attributes);
+  upperUartTaskHandle = osThreadNew(Task_UpperUart, NULL, &upperUartTask_attributes);
+  ledTaskHandle = osThreadNew(Task_Led, NULL, &ledTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -126,4 +168,3 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-

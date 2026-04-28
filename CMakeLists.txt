@@ -45,11 +45,35 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user sources here
+    BSP/adc/adc_monitor.c
+    BSP/encoder/encoder_driver.c
+    BSP/esp01s/esp01s_comm.c
+    BSP/imu/imu_mpu6050.c
+    BSP/led/led_status.c
+    BSP/motor/motor_driver.c
+    BSP/ps2/ps2_control.c
+    App/chassis/chassis_control.c
+    App/chassis/chassis_tasks.c
+    App/control/control_manager.c
+    App/monitor/system_monitor.c
+    App/protocol/upper_protocol.c
+    App/protocol/upper_uart.c
 )
 
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    BSP/adc
+    BSP/encoder
+    BSP/esp01s
+    BSP/imu
+    BSP/led
+    BSP/motor
+    BSP/ps2
+    App/chassis
+    App/control
+    App/monitor
+    App/protocol
 )
 
 # Add project symbols (macros)

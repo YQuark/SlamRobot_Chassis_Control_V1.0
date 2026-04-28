@@ -1,0 +1,13 @@
+# Local IDE and agent state
+.idea/
+.codex
+.learnings/
+outputs/
+
+# Runtime logs
+logs/
+*.log
+
+# Local build output
+build/
+cmake-build-*/
