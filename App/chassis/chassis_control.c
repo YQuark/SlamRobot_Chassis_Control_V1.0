@@ -4,11 +4,31 @@
 #include "control_manager.h"
 #include "encoder_driver.h"
 #include "motor_driver.h"
+#include "pid_controller.h"
 
 static chassis_control_state_t chassis_state;
 static uint8_t open_loop_test_enabled;
 static int16_t open_loop_left;
 static int16_t open_loop_right;
+
+static pid_state_t pid_left;
+static pid_state_t pid_right;
+
+static const pid_params_t pid_params_left = {
+  .kp = CHASSIS_PID_KP_L,
+  .ki = CHASSIS_PID_KI_L,
+  .kd = CHASSIS_PID_KD_L,
+  .integral_limit = CHASSIS_PID_INTEGRAL_LIMIT_L,
+  .output_limit = (float)CHASSIS_PWM_MAX_PERMILLE,
+};
+
+static const pid_params_t pid_params_right = {
+  .kp = CHASSIS_PID_KP_R,
+  .ki = CHASSIS_PID_KI_R,
+  .kd = CHASSIS_PID_KD_R,
+  .integral_limit = CHASSIS_PID_INTEGRAL_LIMIT_R,
+  .output_limit = (float)CHASSIS_PWM_MAX_PERMILLE,
+};
 
 static void ChassisControl_ResolveWheelTargets(const chassis_cmd_t *cmd)
 {
@@ -16,10 +36,38 @@ static void ChassisControl_ResolveWheelTargets(const chassis_cmd_t *cmd)
   chassis_state.right_target_mps = cmd->linear_x + (cmd->angular_z * CHASSIS_WHEEL_BASE_M * 0.5f);
 }
 
+static int16_t ChassisControl_MpsToPermille(float target_mps)
+{
+  int32_t permille;
+
+  if (target_mps > CHASSIS_OPENLOOP_MAX_MPS)
+  {
+    target_mps = CHASSIS_OPENLOOP_MAX_MPS;
+  }
+  else if (target_mps < -CHASSIS_OPENLOOP_MAX_MPS)
+  {
+    target_mps = -CHASSIS_OPENLOOP_MAX_MPS;
+  }
+
+  permille = (int32_t)((target_mps / CHASSIS_OPENLOOP_MAX_MPS) * (float)CHASSIS_PWM_MAX_PERMILLE);
+  if (permille > CHASSIS_PWM_MAX_PERMILLE)
+  {
+    permille = CHASSIS_PWM_MAX_PERMILLE;
+  }
+  else if (permille < -CHASSIS_PWM_MAX_PERMILLE)
+  {
+    permille = -CHASSIS_PWM_MAX_PERMILLE;
+  }
+
+  return (int16_t)permille;
+}
+
 void ChassisControl_Init(void)
 {
   MotorDriver_Init();
   ControlManager_Init();
+  PidController_Init(&pid_left, &pid_params_left);
+  PidController_Init(&pid_right, &pid_params_right);
   chassis_state = (chassis_control_state_t){0};
   open_loop_test_enabled = 0U;
   open_loop_left = 0;
@@ -31,7 +79,9 @@ void ChassisControl_Step(uint32_t now_ms)
 {
   chassis_cmd_t cmd;
   encoder_state_t encoder_state;
-  uint8_t valid_cmd = ControlManager_GetCommand(&cmd, now_ms);
+  uint8_t valid_cmd;
+
+  valid_cmd = ControlManager_GetCommand(&cmd, now_ms);
 
   EncoderDriver_GetState(&encoder_state);
   chassis_state.left_actual_mps = encoder_state.left_speed_mps;
@@ -53,21 +103,42 @@ void ChassisControl_Step(uint32_t now_ms)
 
   if (valid_cmd != 0U)
   {
+    int16_t left_permille;
+    int16_t right_permille;
+
     ChassisControl_ResolveWheelTargets(&cmd);
-    /* PID is intentionally not enabled in this hardware-framework slice. */
+
+    if (CHASSIS_PID_ENABLED != 0U)
+    {
+      float dt_s = (float)CHASSIS_CONTROL_PERIOD_MS / 1000.0f;
+      float pid_out_l = PidController_Step(&pid_left, chassis_state.left_target_mps, chassis_state.left_actual_mps, dt_s);
+      float pid_out_r = PidController_Step(&pid_right, chassis_state.right_target_mps, chassis_state.right_actual_mps, dt_s);
+      left_permille = (int16_t)pid_out_l;
+      right_permille = (int16_t)pid_out_r;
+    }
+    else
+    {
+      left_permille = ChassisControl_MpsToPermille(chassis_state.left_target_mps);
+      right_permille = ChassisControl_MpsToPermille(chassis_state.right_target_mps);
+    }
+
+    MotorDriver_SetPermille(MOTOR_SIDE_LEFT, left_permille);
+    MotorDriver_SetPermille(MOTOR_SIDE_RIGHT, right_permille);
+    chassis_state.output_enabled = 1U;
   }
   else
   {
     chassis_state.left_target_mps = 0.0f;
     chassis_state.right_target_mps = 0.0f;
+    MotorDriver_StopAll(MOTOR_STOP_COAST);
+    chassis_state.output_enabled = 0U;
   }
-
-  MotorDriver_StopAll(MOTOR_STOP_COAST);
-  chassis_state.output_enabled = 0U;
 }
 
 void ChassisControl_EmergencyStop(void)
 {
+  PidController_Reset(&pid_left);
+  PidController_Reset(&pid_right);
   open_loop_test_enabled = 0U;
   chassis_state.left_target_mps = 0.0f;
   chassis_state.right_target_mps = 0.0f;

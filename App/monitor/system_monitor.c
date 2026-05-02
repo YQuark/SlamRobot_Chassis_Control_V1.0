@@ -22,17 +22,20 @@ void SystemMonitor_Update(void)
   monitor_state.right_current_a = adc_state.right_current_a;
   monitor_state.control_mode = ControlManager_GetActiveSource();
 
-  if (monitor_state.battery_voltage > 0.1f && monitor_state.battery_voltage < BATTERY_LOW_WARN_V)
+  if (ADC_MONITOR_CALIBRATION_ENABLED != 0U)
   {
-    monitor_state.error_flags |= SYSTEM_ERROR_LOW_BATTERY;
-  }
-  if (monitor_state.left_current_a > MOTOR_STALL_CURRENT_A)
-  {
-    monitor_state.error_flags |= SYSTEM_ERROR_LEFT_OVERCURRENT;
-  }
-  if (monitor_state.right_current_a > MOTOR_STALL_CURRENT_A)
-  {
-    monitor_state.error_flags |= SYSTEM_ERROR_RIGHT_OVERCURRENT;
+    if (monitor_state.battery_voltage > 0.1f && monitor_state.battery_voltage < BATTERY_LOW_WARN_V)
+    {
+      monitor_state.error_flags |= SYSTEM_ERROR_LOW_BATTERY;
+    }
+    if (monitor_state.left_current_a > MOTOR_STALL_CURRENT_A)
+    {
+      monitor_state.error_flags |= SYSTEM_ERROR_LEFT_OVERCURRENT;
+    }
+    if (monitor_state.right_current_a > MOTOR_STALL_CURRENT_A)
+    {
+      monitor_state.error_flags |= SYSTEM_ERROR_RIGHT_OVERCURRENT;
+    }
   }
   if (ControlManager_IsEmergencyStop() != 0U)
   {

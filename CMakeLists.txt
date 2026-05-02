@@ -51,6 +51,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/imu/imu_mpu6050.c
     BSP/led/led_status.c
     BSP/motor/motor_driver.c
+    BSP/pid/pid_controller.c
     BSP/ps2/ps2_control.c
     App/chassis/chassis_control.c
     App/chassis/chassis_tasks.c
@@ -69,6 +70,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/imu
     BSP/led
     BSP/motor
+    BSP/pid
     BSP/ps2
     App/chassis
     App/control
