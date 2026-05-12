@@ -8,6 +8,7 @@ extern "C" {
 #define CHASSIS_CONTROL_PERIOD_MS        10U
 #define CHASSIS_ENCODER_PERIOD_MS        10U
 #define CHASSIS_ADC_PERIOD_MS            20U
+#define CHASSIS_IMU_PERIOD_MS            20U
 #define CHASSIS_LED_PERIOD_MS            1U
 #define UPPER_UART_TASK_PERIOD_MS        5U
 #define UPPER_UART_STATUS_PERIOD_MS      50U

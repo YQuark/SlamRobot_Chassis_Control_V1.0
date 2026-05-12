@@ -67,6 +67,8 @@ control_mode(uint8)
 
 Current status period: `UPPER_UART_STATUS_PERIOD_MS`.
 
+`imu_accel` and `imu_gyro` are cached raw MPU6050 register values. USART1 debug logs provide scaled VOFA+ channels in `mg` and `mdps` plus IMU diagnostic fields; the USART3 frame shape remains unchanged.
+
 `control_mode` values:
 
 ```text

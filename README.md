@@ -17,12 +17,13 @@
 - USART1 文本调试控制台，可用于电机、编码器、ADC 和闭环速度初调。
 - 速度闭环初调框架与电流软限流/过流停车保护。
 - LED 软件呼吸灯。
-- MPU6050、PS2、ESP01S 预留接口。
+- MPU6050 基础初始化、原始数据读取与单位换算。
+- PS2、ESP01S 预留接口。
 
 暂未完成：
 
 - 电机 PID 闭环精调。
-- MPU6050 完整初始化、校准与读取。
+- MPU6050 零偏校准、姿态融合与控制接入。
 - PS2 手柄实际协议解析。
 - ESP01S 实际通信协议解析。
 - ROS2 上位机节点。
@@ -133,7 +134,15 @@ USART1 当前用于本地初步硬件联调，串口参数为：
 | --- | --- |
 | `help` | 显示命令列表 |
 | `status` | 输出一次编码器、ADC、IMU 和底盘状态 |
-| `log 1` / `log 0` | 开启或关闭 500 ms 周期日志 |
+| `header` | 输出 VOFA+ CSV 字段名 |
+| `i2cscan` | 只探测 IMU 常用地址 `0x68/0x69`，避免全总线扫描导致调试任务长时间阻塞 |
+| `imutest` | 单次读取 `0x68/0x69` 的 `WHO_AM_I` 与 HAL 错误码，并打印当前 IMU 缓存状态 |
+| `imu 1` / `imu 0` | 启用或关闭 IMU 周期读取；默认关闭，避免 I2C 异常影响底盘调试 |
+| `imuprobe` | 只读探测 IMU 地址和 `WHO_AM_I`，不写寄存器，不启动周期读取 |
+| `imuinit` | 只读初始化并进入 `online=1`，不写配置寄存器，避免当前模块写寄存器卡死 |
+| `imuread` | 发起一次非阻塞 IMU 采样读取，通过后续 `status/log` 查看结果 |
+| `imuwrite R V` | 单次写 IMU 寄存器并读回，`R/V` 支持 `0x` 十六进制 |
+| `log 1` / `log 0` | 开启或关闭 500 ms VOFA+ CSV 周期日志 |
 | `motor L R` | 左右电机开环 permille 测试，范围 `-900..900` |
 | `left P` / `right P` | 单侧电机开环测试 |
 | `vel V [W]` | 闭环速度测试，`V` 为 mm/s，`W` 为 mrad/s |
@@ -157,12 +166,32 @@ vel 100 0
 stop
 ```
 
+VOFA+ 使用方式：
+
+- 协议选择 FireWater/CSV。
+- `log 1` 会先输出字段名，然后周期输出逗号分隔数据。
+- 为避免嵌入式浮点 printf 开销，日志使用定标整数：速度 `mm/s`、电压 `mV`、电流 `mA`、加速度 `mg`、角速度 `mdps`。
+
+CSV 字段：
+
+```text
+t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_pwm,right_pwm,vbat_mv,left_current_ma,right_current_ma,acc_x_mg,acc_y_mg,acc_z_mg,gyro_x_mdps,gyro_y_mdps,gyro_z_mdps,imu_online,imu_addr,imu_who,imu_err,imu_errcnt,imu_transfer,imu_i2cerr,imu_read_ms,error_flags
+```
+
 注意：
 
 - `motor` 是开环测试命令，主要用于硬件方向、电机和编码器验证。
 - `vel` 走统一控制命令和速度闭环，用于低速 PID 初调。
 - 当前轮距仍未标定，角速度命令依赖 `CHASSIS_WHEEL_BASE_M`，未确认前优先测试 `vel V 0`。
-- 当前 MPU6050 读取尚未完成，`IMU online=0` 不代表最终硬件结论。
+- 当前 MPU6050 默认使用 I2C1，优先探测地址 `0x68`，失败后尝试 `0x69`。
+- 上电默认不主动读取 IMU；`imu 1` 只打开周期读取允许标志，不会立刻访问 I2C。
+- 周期读取只在 `imuinit` 成功并进入 `online=1` 后执行；当前 `imuinit` 不写 IMU 配置寄存器。
+- `imu 0` 只暂停周期读取，不清除 `online` 缓存状态；再次 `imu 1` 会继续使用上次 `imuinit` 成功后的在线状态。
+- IMU 采样读取使用 I2C1 中断非阻塞模式，`imu_transfer` 显示状态：`0` 空闲，`1` 读取中，`2` 完成待解析，`3` 错误，`4` 超时。
+- `imuwrite` 是危险诊断命令；当前硬件实测写 `0x6B/0x1A/0x1B` 可能导致 I2C 卡死，正常调试不要使用。
+- 若 `i2cscan` 探测不到 `0x68/0x69`，优先检查 PB6/PB7 是否接反、GND 是否共地、AD0 电平、电源电平和模块外部上拉。
+- `WHO_AM_I=0x68` 按 MPU6050 处理，`WHO_AM_I=0x70` 按 MPU6500/兼容寄存器器件处理；若上线后数据仍为 0，需要继续核对模块丝印和具体芯片型号。
+- 调试期 I2C1 使用 100 kHz 并开启 MCU 内部上拉；最终硬件仍建议确认外部上拉。
 
 ## 上位机 USART3 协议
 

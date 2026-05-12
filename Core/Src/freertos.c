@@ -50,6 +50,7 @@
 osThreadId_t chassisControlTaskHandle;
 osThreadId_t encoderUpdateTaskHandle;
 osThreadId_t adcMonitorTaskHandle;
+osThreadId_t imuUpdateTaskHandle;
 osThreadId_t ledTaskHandle;
 osThreadId_t upperUartTaskHandle;
 osThreadId_t usart1DebugTaskHandle;
@@ -68,6 +69,12 @@ const osThreadAttr_t encoderUpdateTask_attributes = {
 
 const osThreadAttr_t adcMonitorTask_attributes = {
   .name = "adcMonitor",
+  .stack_size = 384 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
+const osThreadAttr_t imuUpdateTask_attributes = {
+  .name = "imuUpdate",
   .stack_size = 384 * 4,
   .priority = (osPriority_t) osPriorityBelowNormal,
 };
@@ -144,6 +151,7 @@ void MX_FREERTOS_Init(void) {
   chassisControlTaskHandle = osThreadNew(Task_ChassisControl, NULL, &chassisControlTask_attributes);
   encoderUpdateTaskHandle = osThreadNew(Task_EncoderUpdate, NULL, &encoderUpdateTask_attributes);
   adcMonitorTaskHandle = osThreadNew(Task_AdcMonitor, NULL, &adcMonitorTask_attributes);
+  imuUpdateTaskHandle = osThreadNew(Task_ImuUpdate, NULL, &imuUpdateTask_attributes);
   upperUartTaskHandle = osThreadNew(Task_UpperUart, NULL, &upperUartTask_attributes);
   usart1DebugTaskHandle = osThreadNew(Task_Usart1DebugConsole, NULL, &usart1DebugTask_attributes);
   ledTaskHandle = osThreadNew(Task_Led, NULL, &ledTask_attributes);

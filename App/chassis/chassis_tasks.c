@@ -54,6 +54,16 @@ void Task_AdcMonitor(void *argument)
   }
 }
 
+void Task_ImuUpdate(void *argument)
+{
+  (void)argument;
+  for (;;)
+  {
+    ImuMpu6050_Update();
+    osDelay(CHASSIS_IMU_PERIOD_MS);
+  }
+}
+
 void Task_Led(void *argument)
 {
   (void)argument;
