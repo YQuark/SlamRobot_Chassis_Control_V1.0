@@ -12,8 +12,16 @@ typedef enum
   CONTROL_SOURCE_NONE = 0,
   CONTROL_SOURCE_UPPER = 1,
   CONTROL_SOURCE_PS2 = 2,
-  CONTROL_SOURCE_ESP01S = 3
+  CONTROL_SOURCE_ESP01S = 3,
+  CONTROL_SOURCE_DEBUG = 4
 } control_source_t;
+
+typedef enum
+{
+  CONTROL_COMMAND_REJECTED = 0,
+  CONTROL_COMMAND_ACCEPTED = 1,
+  CONTROL_COMMAND_REJECTED_AND_STOPPED = 2
+} control_command_result_t;
 
 typedef struct
 {
@@ -25,10 +33,13 @@ typedef struct
 } chassis_cmd_t;
 
 void ControlManager_Init(void);
-void ControlManager_SetCommand(const chassis_cmd_t *cmd);
+control_command_result_t ControlManager_SetCommand(const chassis_cmd_t *cmd);
 void ControlManager_SetEmergencyStop(uint8_t enabled);
+void ControlManager_SetFaultStop(uint8_t enabled);
+void ControlManager_ClearCommand(void);
 uint8_t ControlManager_GetCommand(chassis_cmd_t *cmd, uint32_t now_ms);
 uint8_t ControlManager_IsEmergencyStop(void);
+uint8_t ControlManager_IsFaultStop(void);
 uint8_t ControlManager_GetActiveSource(void);
 
 #ifdef __cplusplus

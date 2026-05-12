@@ -56,6 +56,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     App/chassis/chassis_control.c
     App/chassis/chassis_tasks.c
     App/control/control_manager.c
+    App/debug/usart1_debug_console.c
     App/monitor/system_monitor.c
     App/protocol/upper_protocol.c
     App/protocol/upper_uart.c
@@ -74,6 +75,7 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     BSP/ps2
     App/chassis
     App/control
+    App/debug
     App/monitor
     App/protocol
 )

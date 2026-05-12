@@ -15,6 +15,7 @@ typedef struct
   float battery_voltage;
   float left_current_a;
   float right_current_a;
+  uint8_t current_valid;
 } adc_monitor_state_t;
 
 void AdcMonitor_Init(void);

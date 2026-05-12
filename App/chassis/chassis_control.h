@@ -13,7 +13,11 @@ typedef struct
   float right_target_mps;
   float left_actual_mps;
   float right_actual_mps;
+  int16_t left_output_permille;
+  int16_t right_output_permille;
   uint8_t output_enabled;
+  uint8_t left_current_limited;
+  uint8_t right_current_limited;
 } chassis_control_state_t;
 
 void ChassisControl_Init(void);

@@ -26,6 +26,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "chassis_tasks.h"
+#include "usart1_debug_console.h"
 
 /* USER CODE END Includes */
 
@@ -51,6 +52,7 @@ osThreadId_t encoderUpdateTaskHandle;
 osThreadId_t adcMonitorTaskHandle;
 osThreadId_t ledTaskHandle;
 osThreadId_t upperUartTaskHandle;
+osThreadId_t usart1DebugTaskHandle;
 
 const osThreadAttr_t chassisControlTask_attributes = {
   .name = "chassisControl",
@@ -80,6 +82,12 @@ const osThreadAttr_t upperUartTask_attributes = {
   .name = "upperUart",
   .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
+};
+
+const osThreadAttr_t usart1DebugTask_attributes = {
+  .name = "usart1Debug",
+  .stack_size = 768 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 
 /* USER CODE END Variables */
@@ -137,6 +145,7 @@ void MX_FREERTOS_Init(void) {
   encoderUpdateTaskHandle = osThreadNew(Task_EncoderUpdate, NULL, &encoderUpdateTask_attributes);
   adcMonitorTaskHandle = osThreadNew(Task_AdcMonitor, NULL, &adcMonitorTask_attributes);
   upperUartTaskHandle = osThreadNew(Task_UpperUart, NULL, &upperUartTask_attributes);
+  usart1DebugTaskHandle = osThreadNew(Task_Usart1DebugConsole, NULL, &usart1DebugTask_attributes);
   ledTaskHandle = osThreadNew(Task_Led, NULL, &ledTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
@@ -168,4 +177,3 @@ void StartDefaultTask(void *argument)
 /* USER CODE BEGIN Application */
 
 /* USER CODE END Application */
-
