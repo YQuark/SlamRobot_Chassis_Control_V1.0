@@ -10,8 +10,11 @@ extern "C" {
 #define CHASSIS_ADC_PERIOD_MS            20U
 #define CHASSIS_IMU_PERIOD_MS            20U
 #define CHASSIS_LED_PERIOD_MS            1U
+#define CHASSIS_PS2_PERIOD_MS            20U
+#define CHASSIS_ESP01S_PERIOD_MS         5U
 #define UPPER_UART_TASK_PERIOD_MS        5U
 #define UPPER_UART_STATUS_PERIOD_MS      50U
+#define ESP01S_STATUS_PERIOD_MS          100U
 
 #define CHASSIS_CMD_TIMEOUT_MS           500U
 #define CHASSIS_PWM_MAX_PERMILLE         900
@@ -20,6 +23,12 @@ extern "C" {
 #define CHASSIS_MAX_LINEAR_MPS           0.5f /* Limit accepted linear_x command. */
 #define CHASSIS_OPENLOOP_FULL_MPS        0.5f /* Open-loop command mapped to CHASSIS_PWM_MAX_PERMILLE. */
 #define CHASSIS_ANGULAR_EPSILON_RPS      0.0001f
+
+#define PS2_LINEAR_MAX_MPS               0.35f
+#define PS2_ANGULAR_MAX_RPS              1.0f
+#define PS2_AXIS_CENTER                  128
+#define PS2_AXIS_DEADZONE                18
+#define PS2_ENABLE_BUTTON_MASK           0x08U /* R1: hold-to-drive */
 
 #define CHASSIS_WHEEL_RADIUS_M           0.035f
 #define CHASSIS_WHEEL_BASE_M             0.0f /* TODO: set after the mechanical frame is finalized. */

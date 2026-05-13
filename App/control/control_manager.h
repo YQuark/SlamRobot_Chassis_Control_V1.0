@@ -37,6 +37,7 @@ control_command_result_t ControlManager_SetCommand(const chassis_cmd_t *cmd);
 void ControlManager_SetEmergencyStop(uint8_t enabled);
 void ControlManager_SetFaultStop(uint8_t enabled);
 void ControlManager_ClearCommand(void);
+void ControlManager_ClearSource(uint8_t source);
 uint8_t ControlManager_GetCommand(chassis_cmd_t *cmd, uint32_t now_ms);
 uint8_t ControlManager_IsEmergencyStop(void);
 uint8_t ControlManager_IsFaultStop(void);

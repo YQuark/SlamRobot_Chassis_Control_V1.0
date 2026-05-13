@@ -5,8 +5,10 @@
 #include "chassis_control.h"
 #include "cmsis_os2.h"
 #include "encoder_driver.h"
+#include "esp01s_comm.h"
 #include "imu_mpu6050.h"
 #include "led_status.h"
+#include "ps2_control.h"
 #include "system_monitor.h"
 #include "upper_uart.h"
 #include "usart1_debug_console.h"
@@ -20,6 +22,8 @@ void ChassisTasks_InitHardware(void)
   SystemMonitor_Init();
   ChassisControl_Init();
   UpperUart_Init();
+  Ps2Control_Init();
+  Esp01sComm_Init();
   Usart1DebugConsole_Init();
 }
 
@@ -71,5 +75,25 @@ void Task_Led(void *argument)
   {
     LedStatus_TaskStep(CHASSIS_LED_PERIOD_MS);
     osDelay(CHASSIS_LED_PERIOD_MS);
+  }
+}
+
+void Task_Ps2(void *argument)
+{
+  (void)argument;
+  for (;;)
+  {
+    Ps2Control_Update();
+    osDelay(CHASSIS_PS2_PERIOD_MS);
+  }
+}
+
+void Task_Esp01s(void *argument)
+{
+  (void)argument;
+  for (;;)
+  {
+    Esp01sComm_Update();
+    osDelay(CHASSIS_ESP01S_PERIOD_MS);
   }
 }

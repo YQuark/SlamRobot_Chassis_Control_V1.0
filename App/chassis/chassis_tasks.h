@@ -12,6 +12,8 @@ void Task_AdcMonitor(void *argument);
 void Task_ImuUpdate(void *argument);
 void Task_Led(void *argument);
 void Task_UpperUart(void *argument);
+void Task_Ps2(void *argument);
+void Task_Esp01s(void *argument);
 
 #ifdef __cplusplus
 }

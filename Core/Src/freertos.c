@@ -54,6 +54,8 @@ osThreadId_t imuUpdateTaskHandle;
 osThreadId_t ledTaskHandle;
 osThreadId_t upperUartTaskHandle;
 osThreadId_t usart1DebugTaskHandle;
+osThreadId_t ps2TaskHandle;
+osThreadId_t esp01sTaskHandle;
 
 const osThreadAttr_t chassisControlTask_attributes = {
   .name = "chassisControl",
@@ -95,6 +97,18 @@ const osThreadAttr_t usart1DebugTask_attributes = {
   .name = "usart1Debug",
   .stack_size = 768 * 4,
   .priority = (osPriority_t) osPriorityLow,
+};
+
+const osThreadAttr_t ps2Task_attributes = {
+  .name = "ps2",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityBelowNormal,
+};
+
+const osThreadAttr_t esp01sTask_attributes = {
+  .name = "esp01s",
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
 };
 
 /* USER CODE END Variables */
@@ -154,6 +168,8 @@ void MX_FREERTOS_Init(void) {
   imuUpdateTaskHandle = osThreadNew(Task_ImuUpdate, NULL, &imuUpdateTask_attributes);
   upperUartTaskHandle = osThreadNew(Task_UpperUart, NULL, &upperUartTask_attributes);
   usart1DebugTaskHandle = osThreadNew(Task_Usart1DebugConsole, NULL, &usart1DebugTask_attributes);
+  ps2TaskHandle = osThreadNew(Task_Ps2, NULL, &ps2Task_attributes);
+  esp01sTaskHandle = osThreadNew(Task_Esp01s, NULL, &esp01sTask_attributes);
   ledTaskHandle = osThreadNew(Task_Led, NULL, &ledTask_attributes);
   /* USER CODE END RTOS_THREADS */
 

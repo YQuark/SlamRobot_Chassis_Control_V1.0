@@ -8,13 +8,13 @@ This note records the safety and measurement rules that must be satisfied before
 
 - The wheel radius is fixed at `CHASSIS_WHEEL_RADIUS_M = 0.035f`.
 - The wheel base is not finalized and remains invalid at `CHASSIS_WHEEL_BASE_M = 0.0f`.
-- With an invalid wheel base, `angular_z != 0` in `SET_VELOCITY` rejects the whole frame, clears the active command, and keeps the chassis stopped.
+- With an invalid wheel base, `angular_z != 0` in `SET_VELOCITY` rejects that source frame and clears that source command. If no higher-priority valid source remains, the chassis stays stopped.
 - The current stage supports `linear_x` only. Both wheels receive the same target speed until the wheel base is finalized.
 
 ## Command Safety Rules
 
-- Emergency stop entry and exit both clear `active_cmd`.
-- Latched fault entry and clear both clear `active_cmd`.
+- Emergency stop entry and exit both clear every stored source command.
+- Latched fault entry and clear both clear every stored source command.
 - During emergency stop or latched fault stop, incoming `SET_VELOCITY` commands are not stored as recoverable commands.
 - After emergency stop is cleared or a latched fault is cleared, the chassis must wait for a new accepted `SET_VELOCITY` before moving.
 - PWM disable is enforced in the chassis/control layer, not in communication, ADC, or monitor modules.

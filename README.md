@@ -18,14 +18,15 @@
 - 速度闭环初调框架与电流软限流/过流停车保护。
 - LED 软件呼吸灯。
 - MPU6050 基础初始化、原始数据读取与单位换算。
-- PS2、ESP01S 预留接口。
+- PS2 手柄输入解析与本地遥控接入。
+- ESP01S USART2 二进制协议接入、Arduino 固件与中文无线调试页面。
 
 暂未完成：
 
 - 电机 PID 闭环精调。
 - MPU6050 零偏校准、姿态融合与控制接入。
-- PS2 手柄实际协议解析。
-- ESP01S 实际通信协议解析。
+- PS2 手柄实物方向、摇杆死区和按键手感标定。
+- ESP01S 页面与实际网络环境联调。
 - ROS2 上位机节点。
 - 轮距、PID 参数等硬件与控制参数实测标定。
 
@@ -65,7 +66,7 @@
 | 左电机电流 | ADC1 IN1 / PA1 | `ADC_CUR_L` |
 | 右电机电流 | ADC1 IN2 / PA2 | `ADC_CUR_R` |
 | 调试串口 | USART1 / PA9, PA10 | 日志与调试 |
-| ESP01S | USART2 / PD5, PD6 | Wi-Fi 通信预留 |
+| ESP01S | USART2 / PD5, PD6 | Wi-Fi 调试与遥控链路 |
 | 树莓派上位机 | USART3 / PB10, PB11 | ROS2 底盘控制通道 |
 | MPU6050 | I2C1 / PB6, PB7 | IMU 通信 |
 | IMU 中断 | PB5 EXTI | `IMU_INT` |
@@ -83,8 +84,8 @@ BSP/
   encoder/                  TIM 编码器读取与速度计算
   adc/                      ADC DMA 采样与电压/电流换算接口
   imu/                      MPU6050 预留驱动
-  ps2/                      PS2 控制输入预留
-  esp01s/                   ESP01S 通信预留
+  ps2/                      PS2 手柄协议与控制映射
+  esp01s/                   ESP01S USART2 通信链路
   led/                      LED 状态显示
 
 App/
@@ -98,6 +99,9 @@ docs/
   protocols/                通信协议说明
   requirements/             需求说明
   plans/                    阶段计划
+
+ESP01S/
+  ESP01S/                   ESP-01S Arduino 固件与内置中文 Web 页面
 ```
 
 ## FreeRTOS 任务
@@ -111,6 +115,8 @@ docs/
 | `Task_AdcMonitor` | 20 ms | 更新 ADC 原始值、电压、电流和错误状态 |
 | `Task_UpperUart` | 5 ms | USART3 协议解析，50 ms 上报状态帧 |
 | `Task_Usart1DebugConsole` | 10 ms | USART1 文本调试命令与日志输出 |
+| `Task_Ps2` | 20 ms | PS2 采样、遥控映射与统一命令提交 |
+| `Task_Esp01s` | 5 ms | USART2 帧解析与 ESP01S 状态帧回传 |
 | `Task_Led` | 1 ms | 软件 PWM 呼吸灯和故障闪烁 |
 
 约束：
@@ -193,9 +199,9 @@ t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_pwm,right_pwm,vbat
 - `WHO_AM_I=0x68` 按 MPU6050 处理，`WHO_AM_I=0x70` 按 MPU6500/兼容寄存器器件处理；若上线后数据仍为 0，需要继续核对模块丝印和具体芯片型号。
 - 调试期 I2C1 使用 100 kHz 并开启 MCU 内部上拉；最终硬件仍建议确认外部上拉。
 
-## 上位机 USART3 协议
+## USART2 / USART3 共用协议
 
-USART3 使用二进制帧：
+USART2 的 ESP01S 链路与 USART3 的上位机链路共用二进制帧：
 
 ```text
 0xA5 0x5A | length | cmd | payload | checksum8
@@ -210,13 +216,23 @@ USART3 使用二进制帧：
 
 | 命令 | 值 | 方向 | Payload |
 | --- | --- | --- | --- |
-| `SET_VELOCITY` | `0x01` | 上位机到 MCU | `linear_x(float), angular_z(float), enable(uint8), mode(uint8)` |
-| `ESTOP` | `0x02` | 上位机到 MCU | `enabled(uint8)` |
-| `STATUS` | `0x81` | MCU 到上位机 | 左右速度、编码器、电池电压、电流、IMU 摘要、错误状态、控制模式 |
+| `SET_VELOCITY` | `0x01` | USART2/USART3 到 MCU | `linear_x(float), angular_z(float), enable(uint8), mode(uint8)` |
+| `ESTOP` | `0x02` | USART2/USART3 到 MCU | `enabled(uint8)` |
+| `STATUS` | `0x81` | MCU 到 USART2/USART3 | 左右速度、编码器、电池电压、电流、IMU 摘要、错误状态、控制模式 |
 
 详细说明见：
 
 - `docs/protocols/2026-04-27-usart3-upper-protocol.md`
+
+## PS2 与 ESP01S
+
+- PS2 采用 GPIO 软件时序读取，优先配置模拟摇杆模式。
+- 当前默认以 `R1` 作为按住使能键；未按住、手柄掉线或摇杆回中后释放 PS2 控制源。
+- 摇杆映射为统一底盘命令：左摇杆纵向控制 `linear_x`，右摇杆横向控制 `angular_z`，方向键提供固定幅值后备输入。
+- 控制源优先级为：急停/故障停机 > USART3 上位机 > PS2 > ESP01S；USART1 调试控制仍保留独立维护入口。
+- `ESP01S/ESP01S/ESP01S.ino` 提供 AP+STA、中文网页遥控、中文状态面板、调试事件日志和 Wi-Fi 配网页面。
+- ESP01S 网页只负责把人的操作转换成正式串口帧，不直接代表 MCU 内部控制状态；最终以 MCU 回传 `STATUS` 为准。
+- 当前 `CHASSIS_WHEEL_BASE_M` 仍未标定时，PS2 与 ESP01S 的非零 `angular_z` 指令会被 MCU 按安全规则拒绝；此阶段优先验证前后直行、急停、掉线释放和状态回传。
 
 ## 构建
 
@@ -280,10 +296,12 @@ App/chassis/chassis_config.h
 5. 手动转动左右轮，确认 TIM4/TIM8 编码器计数方向。
 6. 单电机低占空比开环测试，确认 TB67H450FNG 输入方向。
 7. 修正左右电机方向和编码器方向配置。
-8. 使用 USART1 `vel V 0` 进行低速直线速度环初调。
-9. 验证电流软限流和过流 fault-stop。
-10. 接入 USART3，验证上位机发送速度命令和 MCU 状态帧。
-11. 联调两轮差速前进、后退、原地转向和急停。
+8. 验证 PS2 的连接、`R1` 使能、前后输入和掉线释放。
+9. 烧录 ESP01S Arduino 固件，访问中文调试页面并确认状态帧刷新。
+10. 使用 USART1 `vel V 0` 进行低速直线速度环初调。
+11. 验证电流软限流和过流 fault-stop。
+12. 接入 USART3，验证上位机发送速度命令和 MCU 状态帧。
+13. 联调两轮差速前进、后退、原地转向和急停。
 
 ## 开发规范
 

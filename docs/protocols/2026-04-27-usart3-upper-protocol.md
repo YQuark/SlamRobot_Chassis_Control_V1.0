@@ -1,4 +1,4 @@
-# USART3 Upper Computer Protocol
+# USART2 / USART3 Shared Chassis Protocol
 
 ## Frame Format
 
@@ -26,11 +26,25 @@ Acceptance rules:
 - `linear_x` and `angular_z` must be finite values; NaN and Inf are rejected.
 - `linear_x` is clamped by `CHASSIS_MAX_LINEAR_MPS`.
 - If wheel base is not configured, any non-zero `angular_z` rejects the whole frame.
-- Rejected `angular_z` frames clear the active command and keep the chassis stopped.
+- Rejected `angular_z` frames clear that source's command; if no higher-priority valid source remains, the chassis stays stopped.
 - During emergency stop or latched fault stop, `SET_VELOCITY` is ignored and is not stored as a recoverable command.
-- `enable == 0` clears the active command and keeps the chassis stopped.
+- `enable == 0` clears the command for that source and keeps that source from continuing to own control.
 
 The communication layer never writes motor PWM directly. Accepted commands are submitted to `ControlManager`; PWM output is only performed by the chassis control task.
+
+The same frame format is used by:
+
+- `USART3`: Raspberry Pi / ROS2 upper-computer link.
+- `USART2`: ESP01S Arduino bridge with the built-in Chinese web console.
+
+Control ownership is resolved in firmware, not by the transport layer:
+
+```text
+ESTOP / fault stop
+  > USART3 upper computer
+  > PS2 handheld controller
+  > ESP01S web controller
+```
 
 ### `0x02 ESTOP`
 
@@ -42,7 +56,7 @@ enabled(uint8)
 
 - Non-zero enables emergency stop.
 - `0` clears emergency stop.
-- Entering or clearing emergency stop always clears the active command.
+- Entering or clearing emergency stop always clears every stored source command.
 - After clearing emergency stop, motion resumes only after a new accepted `SET_VELOCITY`.
 
 ## MCU Status Command
@@ -65,7 +79,10 @@ error_flags(uint32)
 control_mode(uint8)
 ```
 
-Current status period: `UPPER_UART_STATUS_PERIOD_MS`.
+Current status periods:
+
+- USART3: `UPPER_UART_STATUS_PERIOD_MS`.
+- USART2 / ESP01S: `ESP01S_STATUS_PERIOD_MS`.
 
 `imu_accel` and `imu_gyro` are cached raw MPU6050 register values. USART1 debug logs provide scaled VOFA+ channels in `mg` and `mdps` plus IMU diagnostic fields; the USART3 frame shape remains unchanged.
 

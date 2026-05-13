@@ -4,7 +4,7 @@
 #include "cmsis_os2.h"
 #include "main.h"
 
-static chassis_cmd_t active_cmd;
+static chassis_cmd_t source_cmds[CONTROL_SOURCE_DEBUG + 1U];
 static uint8_t emergency_stop;
 static uint8_t fault_stop;
 
@@ -39,7 +39,10 @@ static uint8_t ControlManager_KinematicsValid(void)
 
 void ControlManager_Init(void)
 {
-  active_cmd = (chassis_cmd_t){0};
+  for (uint8_t i = 0U; i <= CONTROL_SOURCE_DEBUG; ++i)
+  {
+    source_cmds[i] = (chassis_cmd_t){0};
+  }
   emergency_stop = 0U;
   fault_stop = 0U;
 }
@@ -49,7 +52,25 @@ void ControlManager_ClearCommand(void)
   uint32_t primask = __get_PRIMASK();
 
   __disable_irq();
-  active_cmd = (chassis_cmd_t){0};
+  for (uint8_t i = 0U; i <= CONTROL_SOURCE_DEBUG; ++i)
+  {
+    source_cmds[i] = (chassis_cmd_t){0};
+  }
+  __set_PRIMASK(primask);
+}
+
+void ControlManager_ClearSource(uint8_t source)
+{
+  uint32_t primask;
+
+  if (source == CONTROL_SOURCE_NONE || source > CONTROL_SOURCE_DEBUG)
+  {
+    return;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  source_cmds[source] = (chassis_cmd_t){0};
   __set_PRIMASK(primask);
 }
 
@@ -58,9 +79,13 @@ control_command_result_t ControlManager_SetCommand(const chassis_cmd_t *cmd)
   if (cmd != 0)
   {
     chassis_cmd_t sanitized = *cmd;
-    uint32_t primask = __get_PRIMASK();
+    uint32_t primask;
 
     if (emergency_stop != 0U || fault_stop != 0U)
+    {
+      return CONTROL_COMMAND_REJECTED;
+    }
+    if (sanitized.source == CONTROL_SOURCE_NONE || sanitized.source > CONTROL_SOURCE_DEBUG)
     {
       return CONTROL_COMMAND_REJECTED;
     }
@@ -68,13 +93,13 @@ control_command_result_t ControlManager_SetCommand(const chassis_cmd_t *cmd)
     if (ControlManager_IsFiniteFloat(sanitized.linear_x) == 0U ||
         ControlManager_IsFiniteFloat(sanitized.angular_z) == 0U)
     {
-      ControlManager_ClearCommand();
+      ControlManager_ClearSource(sanitized.source);
       return CONTROL_COMMAND_REJECTED_AND_STOPPED;
     }
 
-    if (sanitized.enable == 0U || sanitized.source == CONTROL_SOURCE_NONE)
+    if (sanitized.enable == 0U)
     {
-      ControlManager_ClearCommand();
+      ControlManager_ClearSource(sanitized.source);
       return CONTROL_COMMAND_REJECTED_AND_STOPPED;
     }
 
@@ -82,12 +107,13 @@ control_command_result_t ControlManager_SetCommand(const chassis_cmd_t *cmd)
     if (ControlManager_KinematicsValid() == 0U &&
         ControlManager_AbsFloat(sanitized.angular_z) > CHASSIS_ANGULAR_EPSILON_RPS)
     {
-      ControlManager_ClearCommand();
+      ControlManager_ClearSource(sanitized.source);
       return CONTROL_COMMAND_REJECTED_AND_STOPPED;
     }
 
+    primask = __get_PRIMASK();
     __disable_irq();
-    active_cmd = sanitized;
+    source_cmds[sanitized.source] = sanitized;
     __set_PRIMASK(primask);
     return CONTROL_COMMAND_ACCEPTED;
   }
@@ -109,26 +135,44 @@ void ControlManager_SetFaultStop(uint8_t enabled)
 
 uint8_t ControlManager_GetCommand(chassis_cmd_t *cmd, uint32_t now_ms)
 {
-  chassis_cmd_t snapshot;
-  uint32_t age_ms;
-  uint32_t primask = __get_PRIMASK();
+  static const uint8_t source_priority[] = {
+    CONTROL_SOURCE_UPPER,
+    CONTROL_SOURCE_PS2,
+    CONTROL_SOURCE_ESP01S,
+    CONTROL_SOURCE_DEBUG,
+  };
+  uint32_t primask;
 
-  __disable_irq();
-  snapshot = active_cmd;
-  __set_PRIMASK(primask);
-
-  age_ms = now_ms - snapshot.timestamp_ms;
   if (cmd != 0)
   {
-    *cmd = snapshot;
+    *cmd = (chassis_cmd_t){0};
   }
-
-  if (emergency_stop != 0U || fault_stop != 0U || snapshot.enable == 0U || snapshot.source == CONTROL_SOURCE_NONE)
+  if (emergency_stop != 0U || fault_stop != 0U)
   {
     return 0U;
   }
 
-  return (age_ms <= CHASSIS_CMD_TIMEOUT_MS) ? 1U : 0U;
+  primask = __get_PRIMASK();
+  __disable_irq();
+  for (uint8_t i = 0U; i < (uint8_t)(sizeof(source_priority) / sizeof(source_priority[0])); ++i)
+  {
+    chassis_cmd_t snapshot = source_cmds[source_priority[i]];
+    uint32_t age_ms = now_ms - snapshot.timestamp_ms;
+
+    if (snapshot.enable != 0U &&
+        snapshot.source != CONTROL_SOURCE_NONE &&
+        age_ms <= CHASSIS_CMD_TIMEOUT_MS)
+    {
+      if (cmd != 0)
+      {
+        *cmd = snapshot;
+      }
+      __set_PRIMASK(primask);
+      return 1U;
+    }
+  }
+  __set_PRIMASK(primask);
+  return 0U;
 }
 
 uint8_t ControlManager_IsEmergencyStop(void)
@@ -144,17 +188,8 @@ uint8_t ControlManager_IsFaultStop(void)
 uint8_t ControlManager_GetActiveSource(void)
 {
   chassis_cmd_t snapshot;
-  uint32_t primask = __get_PRIMASK();
 
-  __disable_irq();
-  snapshot = active_cmd;
-  __set_PRIMASK(primask);
-
-  if (emergency_stop != 0U ||
-      fault_stop != 0U ||
-      snapshot.enable == 0U ||
-      snapshot.source == CONTROL_SOURCE_NONE ||
-      (osKernelGetTickCount() - snapshot.timestamp_ms) > CHASSIS_CMD_TIMEOUT_MS)
+  if (ControlManager_GetCommand(&snapshot, osKernelGetTickCount()) == 0U)
   {
     return CONTROL_SOURCE_NONE;
   }
