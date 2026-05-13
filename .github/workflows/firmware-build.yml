@@ -1,0 +1,52 @@
+name: Firmware Build
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        preset:
+          - Debug
+          - Release
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Read firmware version
+        id: version
+        shell: bash
+        run: echo "value=$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-none-eabi ninja-build
+
+      - name: Configure
+        run: cmake --preset ${{ matrix.preset }}
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: F407_V1.0-${{ steps.version.outputs.value }}-${{ matrix.preset }}
+          if-no-files-found: error
+          path: |
+            build/${{ matrix.preset }}/F407_V1.0.elf
+            build/${{ matrix.preset }}/F407_V1.0.map

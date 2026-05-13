@@ -264,6 +264,18 @@ cmake --build --preset Release
 
 如果在 WSL 中构建，需要确认 `cmake`、`ninja` 和 `arm-none-eabi-gcc` 已加入 PATH。
 
+### 版本号
+
+- 固件版本号统一维护在根目录 `VERSION`。
+- CMake 配置阶段会生成 `chassis_version.h`。
+- USART1 调试控制台启动时会打印当前固件版本，便于烧录后现场核对。
+
+### GitHub Actions
+
+- 仓库新增固件构建工作流，覆盖 `master` 推送、面向 `master` 的 Pull Request 和手动触发。
+- 工作流复用现有 `Debug` / `Release` Preset。
+- 构建完成后会上传 `.elf` 与 `.map` 产物，artifact 名称包含固件版本和构建类型。
+
 ## 配置与标定
 
 主要配置集中在：

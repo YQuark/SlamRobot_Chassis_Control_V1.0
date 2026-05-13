@@ -20,13 +20,21 @@ endif()
 
 # Set the project name
 set(CMAKE_PROJECT_NAME F407_V1.0)
+file(READ "${CMAKE_SOURCE_DIR}/VERSION" CHASSIS_FIRMWARE_VERSION)
+string(STRIP "${CHASSIS_FIRMWARE_VERSION}" CHASSIS_FIRMWARE_VERSION)
 
 # Enable compile command to ease indexing with e.g. clangd
 set(CMAKE_EXPORT_COMPILE_COMMANDS TRUE)
 
 # Core project settings
-project(${CMAKE_PROJECT_NAME})
+project(${CMAKE_PROJECT_NAME} VERSION ${CHASSIS_FIRMWARE_VERSION})
 message("Build type: " ${CMAKE_BUILD_TYPE})
+
+configure_file(
+    "${CMAKE_SOURCE_DIR}/cmake/chassis_version.h.in"
+    "${CMAKE_BINARY_DIR}/generated/chassis_version.h"
+    @ONLY
+)
 
 # Enable CMake support for ASM and C languages
 enable_language(C ASM)
@@ -65,6 +73,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
 # Add include paths
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE
     # Add user defined include paths
+    ${CMAKE_BINARY_DIR}/generated
     BSP/adc
     BSP/encoder
     BSP/esp01s
