@@ -74,21 +74,36 @@ jobs:
           TAG: ${{ steps.version.outputs.tag }}
         shell: bash
         run: |
+          short_sha="$(git rev-parse --short "${{ github.sha }}")"
+          previous_tag="$(git tag --merged "${{ github.sha }}" --sort=-v:refname 'v[0-9]*' | head -n 1)"
+
+          if [ -n "$previous_tag" ]; then
+            changelog_title="Changes since \`$previous_tag\`"
+            changelog_range="$previous_tag..${{ github.sha }}"
+          else
+            changelog_title="Initial release changelog"
+            changelog_range="${{ github.sha }}"
+          fi
+
           cat > release-notes.md <<EOF
           ## Firmware Release
 
           - Version: \`$TAG\`
           - Build: \`Debug\`
-          - Commit: \`${{ github.sha }}\`
-
-          ## Artifacts
-
-          - \`F407_V1.0-$TAG.elf\`
-          - \`F407_V1.0-$TAG.map\`
+          - Commit: \`$short_sha\`
 
           ## Changelog
 
-          GitHub will append automatically generated release notes below.
+          $changelog_title
+
+          EOF
+
+          git log --reverse \
+            --pretty=format:'- `%h` %s' \
+            "$changelog_range" >> release-notes.md
+
+          cat >> release-notes.md <<EOF
+
           EOF
 
       - name: Create release tag
@@ -108,5 +123,4 @@ jobs:
             "build/Debug/F407_V1.0-$TAG.map" \
             --target "${{ github.sha }}" \
             --title "$TAG" \
-            --notes-file release-notes.md \
-            --generate-notes
+            --notes-file release-notes.md
