@@ -274,8 +274,8 @@ cmake --build --preset Release
 
 - `Firmware Build` 工作流覆盖 `master` 推送和面向 `master` 的 Pull Request，复用现有 `Debug` / `Release` Preset 做编译验收。
 - `Release Firmware` 工作流需要在 GitHub Actions 页面手动触发，并输入 `X.Y.Z` 版本号。
-- 手动发布时会构建 `Debug` 固件、创建 `vX.Y.Z` tag、生成 GitHub Release，并将自动 release notes 作为 changelog。
-- GitHub Release 仅附带 Debug `.elf` 与 `.map` 产物。
+- 手动发布时会构建 `Debug` 固件、创建 `vX.Y.Z` tag、生成 GitHub Release，并将固定发布摘要与自动 release notes 一并写入发布页。
+- GitHub Release 仅附带带版本号的 Debug `.elf` 与 `.map` 产物。
 
 ## 配置与标定
 
