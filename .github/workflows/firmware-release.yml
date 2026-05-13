@@ -11,6 +11,9 @@ on:
 permissions:
   contents: write
 
+env:
+  ARM_GNU_TOOLCHAIN_VERSION: 15.2.rel1
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -49,10 +52,33 @@ jobs:
             exit 1
           fi
 
-      - name: Install toolchain
+      - name: Install Ninja
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-arm-none-eabi ninja-build
+          sudo apt-get install -y ninja-build
+
+      - name: Restore Arm GNU Toolchain cache
+        id: arm-toolchain-cache
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/arm-gnu-toolchain-${{ env.ARM_GNU_TOOLCHAIN_VERSION }}-x86_64-arm-none-eabi
+          key: ${{ runner.os }}-arm-gnu-toolchain-${{ env.ARM_GNU_TOOLCHAIN_VERSION }}-arm-none-eabi
+
+      - name: Download Arm GNU Toolchain
+        if: steps.arm-toolchain-cache.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          archive="$RUNNER_TEMP/arm-gnu-toolchain.tar.xz"
+          toolchain_parent="$HOME/.cache"
+          curl --fail --location --retry 3 \
+            --output "$archive" \
+            "https://developer.arm.com/-/media/Files/downloads/gnu/${ARM_GNU_TOOLCHAIN_VERSION}/binrel/arm-gnu-toolchain-${ARM_GNU_TOOLCHAIN_VERSION}-x86_64-arm-none-eabi.tar.xz"
+          mkdir -p "$toolchain_parent"
+          tar -xJf "$archive" -C "$toolchain_parent"
+
+      - name: Add Arm GNU Toolchain to PATH
+        shell: bash
+        run: echo "$HOME/.cache/arm-gnu-toolchain-${ARM_GNU_TOOLCHAIN_VERSION}-x86_64-arm-none-eabi/bin" >> "$GITHUB_PATH"
 
       - name: Configure Debug with release version
         env:
