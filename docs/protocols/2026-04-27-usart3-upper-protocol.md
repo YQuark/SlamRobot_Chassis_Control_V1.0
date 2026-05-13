@@ -3,11 +3,11 @@
 ## Frame Format
 
 ```text
-0xA5 0x5A | length | cmd | payload | checksum8
+0xA5 0x5A | length | cmd | payload | CRC8
 ```
 
 - `length`: byte count of `cmd + payload`, minimum `1`.
-- `checksum8`: low 8 bits of the byte sum from `length` through the last payload byte.
+- `CRC8`: CRC8-MAXIM checksum (polynomial 0x31, lookup-table), computed from `length` through the last payload byte.
 - Multi-byte fields are little-endian.
 - Floating-point fields are IEEE-754 32-bit `float`, little-endian.
 

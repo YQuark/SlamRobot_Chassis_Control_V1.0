@@ -31,11 +31,15 @@ static volatile uint32_t imu_rx_done_ms;
 
 static void ImuMpu6050_SetError(uint8_t error)
 {
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
   imu_state.last_error = error;
   if (error != IMU_MPU6050_ERROR_NONE)
   {
     imu_state.error_count++;
   }
+  __set_PRIMASK(primask);
 }
 
 static uint8_t ImuMpu6050_TryLock(void)
@@ -69,6 +73,10 @@ static int16_t ImuMpu6050_ReadI16(const uint8_t *data)
 
 static void ImuMpu6050_ParseSample(const uint8_t *data)
 {
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+
   imu_state.accel_x = ImuMpu6050_ReadI16(&data[0]);
   imu_state.accel_y = ImuMpu6050_ReadI16(&data[2]);
   imu_state.accel_z = ImuMpu6050_ReadI16(&data[4]);
@@ -89,6 +97,9 @@ static void ImuMpu6050_ParseSample(const uint8_t *data)
   imu_state.online = 1U;
   imu_state.transfer_state = IMU_MPU6050_TRANSFER_IDLE;
   imu_state.last_i2c_error = 0U;
+
+  __set_PRIMASK(primask);
+
   ImuMpu6050_SetError(IMU_MPU6050_ERROR_NONE);
 }
 
@@ -122,21 +133,34 @@ static uint8_t ImuMpu6050_WriteReg(uint8_t reg, uint8_t value)
 
 static uint8_t ImuMpu6050_SelectAddress(void)
 {
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
   imu_state.last_probe_ms = HAL_GetTick();
+  __set_PRIMASK(primask);
 
   if (HAL_I2C_IsDeviceReady(&hi2c1, MPU6050_ADDR_0, 2U, MPU6050_I2C_TIMEOUT_MS) == HAL_OK)
   {
     mpu6050_addr = MPU6050_ADDR_0;
+    primask = __get_PRIMASK();
+    __disable_irq();
     imu_state.detected_addr = 0x68U;
+    __set_PRIMASK(primask);
     return 1U;
   }
   if (HAL_I2C_IsDeviceReady(&hi2c1, MPU6050_ADDR_1, 2U, MPU6050_I2C_TIMEOUT_MS) == HAL_OK)
   {
     mpu6050_addr = MPU6050_ADDR_1;
+    primask = __get_PRIMASK();
+    __disable_irq();
     imu_state.detected_addr = 0x69U;
+    __set_PRIMASK(primask);
     return 1U;
   }
+  primask = __get_PRIMASK();
+  __disable_irq();
   imu_state.detected_addr = 0U;
+  __set_PRIMASK(primask);
   ImuMpu6050_SetError(IMU_MPU6050_ERROR_NO_DEVICE);
   return 0U;
 }
@@ -147,11 +171,21 @@ static uint8_t ImuMpu6050_Configure(void)
 
   if (ImuMpu6050_ReadReg(MPU6050_REG_WHO_AM_I, &who_am_i) == 0U)
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.who_am_i = 0U;
+    __set_PRIMASK(primask);
     ImuMpu6050_SetError(IMU_MPU6050_ERROR_WHOAMI_READ_FAIL);
     return 0U;
   }
-  imu_state.who_am_i = who_am_i;
+  {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    imu_state.who_am_i = who_am_i;
+    __set_PRIMASK(primask);
+  }
   if (ImuMpu6050_IsSupportedWhoAmI(who_am_i) == 0U)
   {
     ImuMpu6050_SetError(IMU_MPU6050_ERROR_WHOAMI_MISMATCH);
@@ -176,15 +210,20 @@ void ImuMpu6050_Init(void)
 
 uint8_t ImuMpu6050_SetEnabled(uint8_t enabled)
 {
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
   if (enabled == 0U)
   {
     imu_enabled = 0U;
     imu_state.enabled = 0U;
+    __set_PRIMASK(primask);
     return 1U;
   }
 
   imu_enabled = 1U;
   imu_state.enabled = 1U;
+  __set_PRIMASK(primask);
   return 1U;
 }
 
@@ -206,7 +245,11 @@ uint8_t ImuMpu6050_ProbeNow(void)
   if (ImuMpu6050_SelectAddress() != 0U &&
       ImuMpu6050_ReadReg(MPU6050_REG_WHO_AM_I, &who_am_i) != 0U)
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.who_am_i = who_am_i;
+    __set_PRIMASK(primask);
     if (ImuMpu6050_IsSupportedWhoAmI(who_am_i) != 0U)
     {
       ImuMpu6050_SetError(IMU_MPU6050_ERROR_NONE);
@@ -219,11 +262,21 @@ uint8_t ImuMpu6050_ProbeNow(void)
   }
   else
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.who_am_i = 0U;
+    __set_PRIMASK(primask);
     ImuMpu6050_SetError(IMU_MPU6050_ERROR_WHOAMI_READ_FAIL);
   }
 
-  imu_state.online = 0U;
+  {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    imu_state.online = 0U;
+    __set_PRIMASK(primask);
+  }
   ImuMpu6050_Unlock();
   return ok;
 }
@@ -239,12 +292,20 @@ uint8_t ImuMpu6050_ConfigNow(void)
 
   if (ImuMpu6050_SelectAddress() != 0U && ImuMpu6050_Configure() != 0U)
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.online = 1U;
+    __set_PRIMASK(primask);
     ok = 1U;
   }
   else
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.online = 0U;
+    __set_PRIMASK(primask);
   }
 
   ImuMpu6050_Unlock();
@@ -308,7 +369,13 @@ uint8_t ImuMpu6050_RequestRead(void)
   imu_rx_error = 0U;
   imu_rx_start_ms = HAL_GetTick();
   imu_rx_done_ms = imu_rx_start_ms;
-  imu_state.transfer_state = IMU_MPU6050_TRANSFER_READING;
+  {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
+    imu_state.transfer_state = IMU_MPU6050_TRANSFER_READING;
+    __set_PRIMASK(primask);
+  }
   status = HAL_I2C_Mem_Read_IT(&hi2c1,
                                mpu6050_addr,
                                MPU6050_REG_ACCEL_XOUT_H,
@@ -317,8 +384,12 @@ uint8_t ImuMpu6050_RequestRead(void)
                                sizeof(imu_rx_buffer));
   if (status != HAL_OK)
   {
+    uint32_t primask = __get_PRIMASK();
+
+    __disable_irq();
     imu_state.transfer_state = IMU_MPU6050_TRANSFER_ERROR;
     imu_state.last_i2c_error = HAL_I2C_GetError(&hi2c1);
+    __set_PRIMASK(primask);
     ImuMpu6050_SetError(IMU_MPU6050_ERROR_READ_FAIL);
     ImuMpu6050_Unlock();
     return 0U;
@@ -335,11 +406,15 @@ void ImuMpu6050_Update(void)
   {
     if ((now_ms - imu_rx_start_ms) > MPU6050_I2C_ASYNC_TIMEOUT_MS)
     {
+      uint32_t primask = __get_PRIMASK();
+
       (void)HAL_I2C_Master_Abort_IT(&hi2c1, mpu6050_addr);
+      __disable_irq();
       imu_state.transfer_state = IMU_MPU6050_TRANSFER_TIMEOUT;
       imu_state.last_i2c_error = HAL_I2C_GetError(&hi2c1);
       imu_state.last_read_ms = now_ms - imu_rx_start_ms;
       imu_state.online = 0U;
+      __set_PRIMASK(primask);
       ImuMpu6050_SetError(IMU_MPU6050_ERROR_READ_TIMEOUT);
       return;
     }
@@ -356,19 +431,30 @@ void ImuMpu6050_Update(void)
 
   if (imu_state.transfer_state == IMU_MPU6050_TRANSFER_ERROR)
   {
+    uint32_t primask = __get_PRIMASK();
+
     imu_rx_error = 0U;
+    __disable_irq();
     imu_state.last_i2c_error = HAL_I2C_GetError(&hi2c1);
     imu_state.online = 0U;
+    __set_PRIMASK(primask);
     ImuMpu6050_SetError(IMU_MPU6050_ERROR_READ_FAIL);
+    primask = __get_PRIMASK();
+    __disable_irq();
     imu_state.transfer_state = IMU_MPU6050_TRANSFER_IDLE;
+    __set_PRIMASK(primask);
     ImuMpu6050_Unlock();
     return;
   }
 
   if (imu_state.transfer_state == IMU_MPU6050_TRANSFER_TIMEOUT)
   {
+    uint32_t primask = __get_PRIMASK();
+
     imu_rx_error = 0U;
+    __disable_irq();
     imu_state.transfer_state = IMU_MPU6050_TRANSFER_IDLE;
+    __set_PRIMASK(primask);
     ImuMpu6050_Unlock();
     return;
   }
@@ -381,10 +467,17 @@ void ImuMpu6050_Update(void)
 
 void ImuMpu6050_GetState(imu_mpu6050_state_t *state)
 {
-  if (state != 0)
+  uint32_t primask;
+
+  if (state == 0)
   {
-    *state = imu_state;
+    return;
   }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  *state = imu_state;
+  __set_PRIMASK(primask);
 }
 
 uint8_t ImuMpu6050_TestAddress(uint8_t addr7, uint8_t *who_am_i, uint32_t *hal_error)

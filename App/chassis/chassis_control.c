@@ -221,7 +221,7 @@ void ChassisControl_EmergencyStop(void)
   chassis_state.left_current_limited = 0U;
   chassis_state.right_current_limited = 0U;
   chassis_state.output_enabled = 0U;
-  MotorDriver_StopAll(MOTOR_STOP_COAST);
+  MotorDriver_StopAll(MOTOR_STOP_BRAKE);
 }
 
 void ChassisControl_OpenLoopTest(int16_t left_permille, int16_t right_permille)

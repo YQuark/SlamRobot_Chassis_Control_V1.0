@@ -4,7 +4,7 @@
 
 本项目为两轮差速移动机器人底盘控制工程（`YQuark/SlamRobot_Chassis_Control_V1.0`），基于原有 `YQuark/SLAM_ROBOT` 工程（四轮差速，2026-04 归档只读）继续开发，但当前硬件架构已经发生较大变更，不应直接沿用旧工程中的四轮底盘、电机驱动、编码器参数与控制假设。
 
-关键变更：四轮差速 → 两轮差速；裸机/简单调度器 → FreeRTOS CMSIS-RTOS v2；COBS+CRC16 协议 → 0xA5 0x5A + checksum8 二进制帧；驱动芯片 → TB67H450FNG；电机 → JGB37-520。
+关键变更：四轮差速 → 两轮差速；裸机/简单调度器 → FreeRTOS CMSIS-RTOS v2；COBS+CRC16 协议 → 0xA5 0x5A + CRC8-MAXIM 二进制帧；驱动芯片 → TB67H450FNG；电机 → JGB37-520。
 
 当前工程已经通过 STM32CubeMX 生成初始代码，并在此基础上继续进行驱动层、控制层、通信层、FreeRTOS 任务层与上位机接口适配。
 
@@ -473,7 +473,7 @@ USART3 DMA RX ISR
             → TIM PWM 输出
 ```
 
-并发保护约定：ControlManager 使用临界区保护 `chassis_cmd` 读写；传感器任务（ADC/Encoder）只写各自状态结构体，控制任务只读；电机 PWM 只由 ChassisControl 任务操作。
+并发保护约定：ControlManager 使用临界区保护 `chassis_cmd` 读写；传感器状态结构体（`adc_monitor_state_t`、`encoder_state_t`、`imu_mpu6050_state_t`、`system_monitor_state_t`）使用 `__get_PRIMASK`/`__disable_irq`/`__set_PRIMASK` 临界区保护整体写入和整体拷贝，防止多任务并发读取时发生撕裂；电机 PWM 只由 ChassisControl 任务操作。
 
 ---
 
@@ -685,7 +685,7 @@ Core/Inc/main.h、FreeRTOSConfig.h、stm32f4xx_hal_conf.h
 
 - PS2 控制超时停车。
 
-- 急停接口或软件急停命令。
+- 急停接口或软件急停命令（使用短路制动 BRAKE 模式，IN1/IN2 同时 100% PWM）。
 
 - PWM 输出限幅。
 
@@ -978,7 +978,7 @@ Codex 在修改本项目时必须遵守：
 - LED 引脚：PC2
 - USART 波特率：USART1/2/3 均已通过 CubeMX 配置
 - FreeRTOS 任务周期与优先级：见 `Core/Src/freertos.c` 及 `App/chassis/chassis_config.h`
-- 上位机串口协议帧格式：0xA5 0x5A + length + cmd + payload + checksum8
+- 上位机串口协议帧格式：0xA5 0x5A + length + cmd + payload + CRC8-MAXIM（多项式 0x31，查表法）
 - 电机型号与参数：JGB37-520-12100-EN（12V, 减速比 56, 额定 0.65A, 堵转 2.4A）
 - 编码器基础参数：11 PPR, 4x 正交, 减速比 56, 2464 counts/rev
 - 电机驱动芯片：TB67H450FNG（双路 PWM 输入模式）

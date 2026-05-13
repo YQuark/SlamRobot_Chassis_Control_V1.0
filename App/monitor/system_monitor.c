@@ -4,6 +4,7 @@
 #include "chassis_config.h"
 #include "control_manager.h"
 #include "encoder_driver.h"
+#include "main.h"
 
 static system_monitor_state_t monitor_state;
 static uint8_t left_overcurrent_count;
@@ -67,9 +68,13 @@ void SystemMonitor_Update(void)
 {
   adc_monitor_state_t adc_state;
   encoder_state_t encoder_state;
+  uint32_t primask;
 
   AdcMonitor_GetState(&adc_state);
   EncoderDriver_GetState(&encoder_state);
+
+  primask = __get_PRIMASK();
+  __disable_irq();
 
   monitor_state.error_flags = monitor_state.latched_error_flags;
   monitor_state.battery_voltage = adc_state.battery_voltage;
@@ -106,19 +111,31 @@ void SystemMonitor_Update(void)
     monitor_state.error_flags |= SYSTEM_ERROR_FAULT_STOP;
   }
   monitor_state.control_mode = ControlManager_GetActiveSource();
+
+  __set_PRIMASK(primask);
 }
 
 void SystemMonitor_GetState(system_monitor_state_t *state)
 {
-  if (state != 0)
+  uint32_t primask;
+
+  if (state == 0)
   {
-    *state = monitor_state;
+    return;
   }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  *state = monitor_state;
+  __set_PRIMASK(primask);
 }
 
 void SystemMonitor_ClearLatchedFaults(uint32_t mask)
 {
   uint32_t clearable = mask;
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
 
   if ((mask & SYSTEM_ERROR_LEFT_OVERCURRENT) != 0U &&
       SystemMonitor_CurrentBelowFaultThreshold(monitor_state.left_current_a) == 0U)
@@ -138,9 +155,17 @@ void SystemMonitor_ClearLatchedFaults(uint32_t mask)
     right_overcurrent_count = 0U;
     ControlManager_SetFaultStop(0U);
   }
+
+  __set_PRIMASK(primask);
 }
 
 uint8_t SystemMonitor_HasLatchedFault(void)
 {
-  return (monitor_state.latched_error_flags != 0U) ? 1U : 0U;
+  uint8_t has_fault;
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  has_fault = (monitor_state.latched_error_flags != 0U) ? 1U : 0U;
+  __set_PRIMASK(primask);
+  return has_fault;
 }

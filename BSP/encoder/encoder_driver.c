@@ -1,6 +1,7 @@
 #include "encoder_driver.h"
 
 #include "chassis_config.h"
+#include "main.h"
 #include "tim.h"
 
 #define TWO_PI_F 6.28318530718f
@@ -45,9 +46,13 @@ void EncoderDriver_Update(uint32_t now_ms)
   float dt_s = (float)dt_ms / 1000.0f;
   float counts_per_rev = EncoderDriver_GetCountsPerRev();
   float meters_per_rev = TWO_PI_F * CHASSIS_WHEEL_RADIUS_M;
+  uint32_t primask;
 
   left_last = left_now;
   right_last = right_now;
+
+  primask = __get_PRIMASK();
+  __disable_irq();
 
   encoder_state.left_delta = left_delta;
   encoder_state.right_delta = right_delta;
@@ -72,14 +77,23 @@ void EncoderDriver_Update(uint32_t now_ms)
     encoder_state.speed_valid = 1U;
   }
 
+  __set_PRIMASK(primask);
+
   last_update_ms = now_ms;
   has_last_update = 1U;
 }
 
 void EncoderDriver_GetState(encoder_state_t *state)
 {
-  if (state != 0)
+  uint32_t primask;
+
+  if (state == 0)
   {
-    *state = encoder_state;
+    return;
   }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  *state = encoder_state;
+  __set_PRIMASK(primask);
 }

@@ -204,11 +204,11 @@ t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_pwm,right_pwm,vbat
 USART2 的 ESP01S 链路与 USART3 的上位机链路共用二进制帧：
 
 ```text
-0xA5 0x5A | length | cmd | payload | checksum8
+0xA5 0x5A | length | cmd | payload | CRC8
 ```
 
 - `length` 为 `cmd + payload` 字节数。
-- `checksum8` 为从 `length` 到 payload 末尾的逐字节累加低 8 位。
+- `CRC8` 为 CRC8-MAXIM 校验值（多项式 0x31，查表法），校验域从 `length` 到 payload 末尾。
 - 多字节字段为小端序。
 - `float` 为 IEEE-754 32 位小端序。
 
