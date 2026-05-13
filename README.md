@@ -264,17 +264,18 @@ cmake --build --preset Release
 
 如果在 WSL 中构建，需要确认 `cmake`、`ninja` 和 `arm-none-eabi-gcc` 已加入 PATH。
 
-### 版本号
+### 版本显示
 
-- 固件版本号统一维护在根目录 `VERSION`。
-- CMake 配置阶段会生成 `chassis_version.h`。
-- USART1 调试控制台启动时会打印当前固件版本，便于烧录后现场核对。
+- CMake 默认将固件版本注入为 `dev`，USART1 调试控制台启动时会打印该版本文本。
+- 正式发布时，GitHub Actions 会在构建阶段临时注入你手动输入的语义化版本号，例如 `0.1.1`。
+- 这样可以区分本地调试包与正式 release 附件。
 
 ### GitHub Actions
 
-- 仓库新增固件构建工作流，覆盖 `master` 推送、面向 `master` 的 Pull Request 和手动触发。
-- 工作流复用现有 `Debug` / `Release` Preset。
-- 构建完成后会上传 `.elf` 与 `.map` 产物，artifact 名称包含固件版本和构建类型。
+- `Firmware Build` 工作流覆盖 `master` 推送和面向 `master` 的 Pull Request，复用现有 `Debug` / `Release` Preset 做编译验收。
+- `Release Firmware` 工作流需要在 GitHub Actions 页面手动触发，并输入 `X.Y.Z` 版本号。
+- 手动发布时会构建 `Debug` 固件、创建 `vX.Y.Z` tag、生成 GitHub Release，并将自动 release notes 作为 changelog。
+- GitHub Release 仅附带 Debug `.elf` 与 `.map` 产物。
 
 ## 配置与标定
 

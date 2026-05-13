@@ -7,7 +7,6 @@ on:
   pull_request:
     branches:
       - master
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,11 +25,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Read firmware version
-        id: version
-        shell: bash
-        run: echo "value=$(tr -d '\r\n' < VERSION)" >> "$GITHUB_OUTPUT"
-
       - name: Install toolchain
         run: |
           sudo apt-get update
@@ -41,12 +35,3 @@ jobs:
 
       - name: Build
         run: cmake --build --preset ${{ matrix.preset }}
-
-      - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: F407_V1.0-${{ steps.version.outputs.value }}-${{ matrix.preset }}
-          if-no-files-found: error
-          path: |
-            build/${{ matrix.preset }}/F407_V1.0.elf
-            build/${{ matrix.preset }}/F407_V1.0.map

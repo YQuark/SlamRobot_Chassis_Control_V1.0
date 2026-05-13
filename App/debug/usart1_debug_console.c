@@ -528,7 +528,7 @@ void Usart1DebugConsole_Init(void)
   rx_head = 0U;
   rx_tail = 0U;
   (void)HAL_UART_Receive_IT(&huart1, &rx_byte, 1U);
-  DebugConsole_Write("\r\nF407 chassis firmware v" CHASSIS_FIRMWARE_VERSION "\r\n");
+  DebugConsole_Write("\r\nF407 chassis firmware " CHASSIS_FIRMWARE_VERSION "\r\n");
   DebugConsole_Write("USART1 debug console ready, type help\r\n");
 }
 
