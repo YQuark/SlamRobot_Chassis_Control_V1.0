@@ -11,8 +11,12 @@ typedef struct
 {
   float left_target_mps;
   float right_target_mps;
+  float left_requested_mps;
+  float right_requested_mps;
   float left_actual_mps;
   float right_actual_mps;
+  float left_error_mps;
+  float right_error_mps;
   int16_t left_output_permille;
   int16_t right_output_permille;
   uint8_t output_enabled;

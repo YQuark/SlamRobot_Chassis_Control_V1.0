@@ -25,8 +25,8 @@ Acceptance rules:
 
 - `linear_x` and `angular_z` must be finite values; NaN and Inf are rejected.
 - `linear_x` is clamped by `CHASSIS_MAX_LINEAR_MPS`.
-- If wheel base is not configured, any non-zero `angular_z` rejects the whole frame.
-- Rejected `angular_z` frames clear that source's command; if no higher-priority valid source remains, the chassis stays stopped.
+- Current firmware initializes `CHASSIS_WHEEL_BASE_M` to the measured physical value `0.178f`, so `angular_z` is accepted for controlled differential testing.
+- If wheel base is later set to an invalid value, any non-zero `angular_z` rejects the whole frame and clears that source's command. If no higher-priority valid source remains, the chassis stays stopped.
 - During emergency stop or latched fault stop, `SET_VELOCITY` is ignored and is not stored as a recoverable command.
 - `enable == 0` clears the command for that source and keeps that source from continuing to own control.
 

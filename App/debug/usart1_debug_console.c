@@ -1,12 +1,14 @@
 #include "usart1_debug_console.h"
 
 #include "adc_monitor.h"
+#include "chassis_config.h"
 #include "chassis_control.h"
 #include "chassis_version.h"
 #include "cmsis_os2.h"
 #include "control_manager.h"
 #include "encoder_driver.h"
 #include "imu_mpu6050.h"
+#include "ps2_control.h"
 #include "system_monitor.h"
 #include "usart.h"
 
@@ -45,7 +47,7 @@ static int32_t DebugConsole_Milli(float value)
 
 static void DebugConsole_PrintVofaHeader(void)
 {
-  DebugConsole_Write("t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_pwm,right_pwm,vbat_mv,left_current_ma,right_current_ma,acc_x_mg,acc_y_mg,acc_z_mg,gyro_x_mdps,gyro_y_mdps,gyro_z_mdps,imu_online,imu_addr,imu_who,imu_err,imu_errcnt,imu_transfer,imu_i2cerr,imu_read_ms,error_flags\r\n");
+  DebugConsole_Write("t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_req_mms,right_req_mms,left_err_mms,right_err_mms,left_pwm,right_pwm,vbat_mv,left_current_ma,right_current_ma,acc_x_mg,acc_y_mg,acc_z_mg,gyro_x_mdps,gyro_y_mdps,gyro_z_mdps,imu_online,imu_addr,imu_who,imu_err,imu_errcnt,imu_transfer,imu_i2cerr,imu_read_ms,error_flags,control_source,ps2_online,ps2_drive,ps2_macro,ps2_macro_btn,ps2_lx,ps2_ly,ps2_rx,ps2_ry,ps2_ok,ps2_fail\r\n");
 }
 
 static void DebugConsole_PrintHelp(void)
@@ -79,11 +81,15 @@ static void DebugConsole_PrintStatus(void)
   encoder_state_t encoder_state;
   imu_mpu6050_state_t imu_state;
   chassis_control_state_t chassis_state;
+  system_monitor_state_t monitor_state;
+  ps2_control_state_t ps2_state;
 
   AdcMonitor_GetState(&adc_state);
   EncoderDriver_GetState(&encoder_state);
   ImuMpu6050_GetState(&imu_state);
   ChassisControl_GetState(&chassis_state);
+  SystemMonitor_GetState(&monitor_state);
+  Ps2Control_GetState(&ps2_state);
 
   (void)snprintf(tx, sizeof(tx),
                  "ENC L=%ld d=%ld %ldmm/s R=%ld d=%ld %ldmm/s valid=%u\r\n",
@@ -134,11 +140,15 @@ static void DebugConsole_PrintStatus(void)
   DebugConsole_Write(tx);
 
   (void)snprintf(tx, sizeof(tx),
-                 "CHASSIS target=%ld,%ldmm/s actual=%ld,%ldmm/s pwm=%d,%d lim=%u,%u out=%u estop=%u fault=%u\r\n",
+                 "CHASSIS req=%ld,%ldmm/s target=%ld,%ldmm/s actual=%ld,%ldmm/s err=%ld,%ldmm/s pwm=%d,%d lim=%u,%u out=%u estop=%u fault=%u\r\n",
+                 (long)DebugConsole_Milli(chassis_state.left_requested_mps),
+                 (long)DebugConsole_Milli(chassis_state.right_requested_mps),
                  (long)DebugConsole_Milli(chassis_state.left_target_mps),
                  (long)DebugConsole_Milli(chassis_state.right_target_mps),
                  (long)DebugConsole_Milli(chassis_state.left_actual_mps),
                  (long)DebugConsole_Milli(chassis_state.right_actual_mps),
+                 (long)DebugConsole_Milli(chassis_state.left_error_mps),
+                 (long)DebugConsole_Milli(chassis_state.right_error_mps),
                  chassis_state.left_output_permille,
                  chassis_state.right_output_permille,
                  chassis_state.left_current_limited,
@@ -146,6 +156,35 @@ static void DebugConsole_PrintStatus(void)
                  chassis_state.output_enabled,
                  ControlManager_IsEmergencyStop(),
                  ControlManager_IsFaultStop());
+  DebugConsole_Write(tx);
+
+  (void)snprintf(tx, sizeof(tx),
+                 "SYS source=%u errors=0x%08lX latched=0x%08lX wheel_base=%ldmm pid=%u\r\n",
+                 monitor_state.control_mode,
+                 (unsigned long)monitor_state.error_flags,
+                 (unsigned long)monitor_state.latched_error_flags,
+                 (long)DebugConsole_Milli(CHASSIS_WHEEL_BASE_M),
+                 (unsigned int)CHASSIS_PID_ENABLED);
+  DebugConsole_Write(tx);
+
+  (void)snprintf(tx, sizeof(tx),
+                 "PS2 online=%u analog=%u drive=%u macro=%u macro_btn=0x%02X swap=%u btn=%02X,%02X lx=%u ly=%u rx=%u ry=%u cmd=%ld,%ldmm/s ok=%lu fail=%lu\r\n",
+                 ps2_state.online,
+                 ps2_state.analog_mode,
+                 ps2_state.drive_enabled,
+                 ps2_state.macro_active,
+                 ps2_state.macro_button,
+                 ps2_state.cmd_dat_swapped,
+                 ps2_state.btn1,
+                 ps2_state.btn2,
+                 ps2_state.left_x,
+                 ps2_state.left_y,
+                 ps2_state.right_x,
+                 ps2_state.right_y,
+                 (long)DebugConsole_Milli(ps2_state.linear_x),
+                 (long)DebugConsole_Milli(ps2_state.angular_z),
+                 (unsigned long)ps2_state.rx_ok_count,
+                 (unsigned long)ps2_state.rx_fail_count);
   DebugConsole_Write(tx);
 }
 
@@ -156,19 +195,25 @@ static void DebugConsole_PrintVofaFrame(uint32_t now_ms)
   imu_mpu6050_state_t imu_state;
   chassis_control_state_t chassis_state;
   system_monitor_state_t monitor_state;
+  ps2_control_state_t ps2_state;
 
   AdcMonitor_GetState(&adc_state);
   ImuMpu6050_GetState(&imu_state);
   ChassisControl_GetState(&chassis_state);
   SystemMonitor_GetState(&monitor_state);
+  Ps2Control_GetState(&ps2_state);
 
   (void)snprintf(tx, sizeof(tx),
-                 "%lu,%ld,%ld,%ld,%ld,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%u,%u,%u,%u,%lu,%u,%lu,%lu,%lu\r\n",
+                 "%lu,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%d,%d,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%ld,%u,%u,%u,%u,%lu,%u,%lu,%lu,%lu,%u,%u,%u,%u,%u,%u,%u,%u,%u,%lu,%lu\r\n",
                  (unsigned long)now_ms,
                  (long)DebugConsole_Milli(chassis_state.left_actual_mps),
                  (long)DebugConsole_Milli(chassis_state.right_actual_mps),
                  (long)DebugConsole_Milli(chassis_state.left_target_mps),
                  (long)DebugConsole_Milli(chassis_state.right_target_mps),
+                 (long)DebugConsole_Milli(chassis_state.left_requested_mps),
+                 (long)DebugConsole_Milli(chassis_state.right_requested_mps),
+                 (long)DebugConsole_Milli(chassis_state.left_error_mps),
+                 (long)DebugConsole_Milli(chassis_state.right_error_mps),
                  chassis_state.left_output_permille,
                  chassis_state.right_output_permille,
                  (long)DebugConsole_Milli(adc_state.battery_voltage),
@@ -188,7 +233,18 @@ static void DebugConsole_PrintVofaFrame(uint32_t now_ms)
                  imu_state.transfer_state,
                  (unsigned long)imu_state.last_i2c_error,
                  (unsigned long)imu_state.last_read_ms,
-                 (unsigned long)monitor_state.error_flags);
+                 (unsigned long)monitor_state.error_flags,
+                 monitor_state.control_mode,
+                 ps2_state.online,
+                 ps2_state.drive_enabled,
+                 ps2_state.macro_active,
+                 ps2_state.macro_button,
+                 ps2_state.left_x,
+                 ps2_state.left_y,
+                 ps2_state.right_x,
+                 ps2_state.right_y,
+                 (unsigned long)ps2_state.rx_ok_count,
+                 (unsigned long)ps2_state.rx_fail_count);
   DebugConsole_Write(tx);
 }
 

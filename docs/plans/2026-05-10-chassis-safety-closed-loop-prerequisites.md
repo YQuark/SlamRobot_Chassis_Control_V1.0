@@ -7,9 +7,9 @@ This note records the safety and measurement rules that must be satisfied before
 ## Current Development Stage
 
 - The wheel radius is fixed at `CHASSIS_WHEEL_RADIUS_M = 0.035f`.
-- The wheel base is not finalized and remains invalid at `CHASSIS_WHEEL_BASE_M = 0.0f`.
-- With an invalid wheel base, `angular_z != 0` in `SET_VELOCITY` rejects that source frame and clears that source command. If no higher-priority valid source remains, the chassis stays stopped.
-- The current stage supports `linear_x` only. Both wheels receive the same target speed until the wheel base is finalized.
+- The wheel base now uses the measured initial value `CHASSIS_WHEEL_BASE_M = 0.178f`.
+- If wheel base is later set to an invalid value, `angular_z != 0` in `SET_VELOCITY` rejects that source frame and clears that source command. If no higher-priority valid source remains, the chassis stays stopped.
+- The current stage supports differential `linear_x` + `angular_z` control, but effective wheel base still needs rotation testing and calibration.
 
 ## Command Safety Rules
 
@@ -89,7 +89,7 @@ The physical shunt resistor power rating must exceed the stall transient dissipa
 
 1. Current monitoring, filtering, debounce, fault latch, and stop entry.
 2. Linear speed loop with equal left/right wheel targets.
-3. Differential angular control after wheel base is finalized.
+3. Differential angular control calibration after effective wheel base is measured.
 4. Speed outer loop plus current inner PI loop.
 
 The current PI inner loop remains deferred.

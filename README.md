@@ -16,7 +16,7 @@
 - USART3 上位机二进制协议框架。
 - USART1 文本调试控制台，可用于电机、编码器、ADC 和闭环速度初调。
 - 速度闭环初调框架与电流软限流/过流停车保护。
-- LED 软件呼吸灯。
+- LED 状态闪烁。
 - MPU6050 基础初始化、原始数据读取与单位换算。
 - PS2 手柄输入解析与本地遥控接入。
 - ESP01S USART2 二进制协议接入、Arduino 固件与中文无线调试页面。
@@ -71,7 +71,7 @@
 | MPU6050 | I2C1 / PB6, PB7 | IMU 通信 |
 | IMU 中断 | PB5 EXTI | `IMU_INT` |
 | PS2 | PA4, PA5, PA6, PA7 | CLK, CS, CMD, DAT |
-| LED | PC2 | 软件呼吸灯 |
+| LED | PC2 | 状态闪烁 |
 
 ## 目录结构
 
@@ -117,7 +117,7 @@ ESP01S/
 | `Task_Usart1DebugConsole` | 10 ms | USART1 文本调试命令与日志输出 |
 | `Task_Ps2` | 20 ms | PS2 采样、遥控映射与统一命令提交 |
 | `Task_Esp01s` | 5 ms | USART2 帧解析与 ESP01S 状态帧回传 |
-| `Task_Led` | 1 ms | 软件 PWM 呼吸灯和故障闪烁 |
+| `Task_Led` | 50 ms | 状态闪烁和故障快闪 |
 
 约束：
 
@@ -181,14 +181,14 @@ VOFA+ 使用方式：
 CSV 字段：
 
 ```text
-t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_pwm,right_pwm,vbat_mv,left_current_ma,right_current_ma,acc_x_mg,acc_y_mg,acc_z_mg,gyro_x_mdps,gyro_y_mdps,gyro_z_mdps,imu_online,imu_addr,imu_who,imu_err,imu_errcnt,imu_transfer,imu_i2cerr,imu_read_ms,error_flags
+t_ms,left_mms,right_mms,left_target_mms,right_target_mms,left_req_mms,right_req_mms,left_err_mms,right_err_mms,left_pwm,right_pwm,vbat_mv,left_current_ma,right_current_ma,acc_x_mg,acc_y_mg,acc_z_mg,gyro_x_mdps,gyro_y_mdps,gyro_z_mdps,imu_online,imu_addr,imu_who,imu_err,imu_errcnt,imu_transfer,imu_i2cerr,imu_read_ms,error_flags,control_source,ps2_online,ps2_drive,ps2_macro,ps2_macro_btn,ps2_lx,ps2_ly,ps2_rx,ps2_ry,ps2_ok,ps2_fail
 ```
 
 注意：
 
 - `motor` 是开环测试命令，主要用于硬件方向、电机和编码器验证。
 - `vel` 走统一控制命令和速度闭环，用于低速 PID 初调。
-- 当前轮距仍未标定，角速度命令依赖 `CHASSIS_WHEEL_BASE_M`，未确认前优先测试 `vel V 0`。
+- 当前轮距按 0.178 m 物理测量值初始化，角速度和快捷旋转仍需通过实测继续修正有效轮距。
 - 当前 MPU6050 默认使用 I2C1，优先探测地址 `0x68`，失败后尝试 `0x69`。
 - 上电默认不主动读取 IMU；`imu 1` 只打开周期读取允许标志，不会立刻访问 I2C。
 - 周期读取只在 `imuinit` 成功并进入 `online=1` 后执行；当前 `imuinit` 不写 IMU 配置寄存器。
@@ -227,12 +227,13 @@ USART2 的 ESP01S 链路与 USART3 的上位机链路共用二进制帧：
 ## PS2 与 ESP01S
 
 - PS2 采用 GPIO 软件时序读取，优先配置模拟摇杆模式。
-- 当前默认以 `R1` 作为按住使能键；未按住、手柄掉线或摇杆回中后释放 PS2 控制源。
-- 摇杆映射为统一底盘命令：左摇杆纵向控制 `linear_x`，右摇杆横向控制 `angular_z`，方向键提供固定幅值后备输入。
+- PS2 在线时读取摇杆和快捷键；只有摇杆明显输入或快捷动作运行时才占用 PS2 控制源，摇杆回中后释放 PS2 控制源。
+- 摇杆映射为统一底盘命令：左摇杆纵向线性控制 `linear_x`，右摇杆横向线性控制 `angular_z`。
+- `L1`/`R1` 触发原地左/右定时长旋转，`L2`/`R2` 触发较短定时长旋转；任意明显摇杆输入会立即打断快捷动作。当前快捷动作不是闭环角度控制，实际角度需要结合速度斜坡、有效轮距和地面情况实测校准。
 - 控制源优先级为：急停/故障停机 > USART3 上位机 > PS2 > ESP01S；USART1 调试控制仍保留独立维护入口。
 - `ESP01S/ESP01S/ESP01S.ino` 提供 AP+STA、中文网页遥控、中文状态面板、调试事件日志和 Wi-Fi 配网页面。
 - ESP01S 网页只负责把人的操作转换成正式串口帧，不直接代表 MCU 内部控制状态；最终以 MCU 回传 `STATUS` 为准。
-- 当前 `CHASSIS_WHEEL_BASE_M` 仍未标定时，PS2 与 ESP01S 的非零 `angular_z` 指令会被 MCU 按安全规则拒绝；此阶段优先验证前后直行、急停、掉线释放和状态回传。
+- 当前 `CHASSIS_WHEEL_BASE_M` 已按 0.178 m 物理轮距初始化，后续仍需通过原地旋转实测继续修正有效轮距。
 
 ## 构建
 
@@ -304,12 +305,12 @@ App/chassis/chassis_config.h
 
 1. 构建通过，确认 CubeMX 初始化无误。
 2. 上电确认 PWM 默认输出为 0，电机不误动作。
-3. 验证 LED 呼吸灯。
+3. 验证 LED 闪烁状态。
 4. 读取 ADC 原始值，确认三通道顺序。
 5. 手动转动左右轮，确认 TIM4/TIM8 编码器计数方向。
 6. 单电机低占空比开环测试，确认 TB67H450FNG 输入方向。
 7. 修正左右电机方向和编码器方向配置。
-8. 验证 PS2 的连接、`R1` 使能、前后输入和掉线释放。
+8. 验证 PS2 的连接、摇杆线性输入、空闲释放、快捷旋转打断和掉线释放。
 9. 烧录 ESP01S Arduino 固件，访问中文调试页面并确认状态帧刷新。
 10. 使用 USART1 `vel V 0` 进行低速直线速度环初调。
 11. 验证电流软限流和过流 fault-stop。

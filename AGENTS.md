@@ -2,7 +2,7 @@
 
 ## 项目定位
 
-本项目为两轮差速移动机器人底盘控制工程（`YQuark/SlamRobot_Chassis_Control_V1.0`），基于原有 `YQuark/SLAM_ROBOT` 工程（四轮差速，2026-04 归档只读）继续开发，但当前硬件架构已经发生较大变更，不应直接沿用旧工程中的四轮底盘、电机驱动、编码器参数与控制假设。
+本项目为两轮差速移动机器人底盘控制工程（`Yaoser-x/SlamRobot_Chassis_Control_V1.0`），基于原有 `Yaoser-x/SLAM_ROBOT` 工程（四轮差速，2026-04 归档只读）继续开发，但当前硬件架构已经发生较大变更，不应直接沿用旧工程中的四轮底盘、电机驱动、编码器参数与控制假设。
 
 关键变更：四轮差速 → 两轮差速；裸机/简单调度器 → FreeRTOS CMSIS-RTOS v2；COBS+CRC16 协议 → 0xA5 0x5A + CRC8-MAXIM 二进制帧；驱动芯片 → TB67H450FNG；电机 → JGB37-520。
 
@@ -20,7 +20,7 @@
 
 - 软件框架：HAL + FreeRTOS。
 
-- 项目基底：参考 `https://github.com/YQuark/SLAM_ROBOT`，但当前版本已经更换为两轮差速结构。
+- 项目基底：参考 `https://github.com/Yaoser-x/SLAM_ROBOT`，但当前版本已经更换为两轮差速结构。
 
 - 控制目标：左右双电机独立控制，构成两轮差速底盘。
 
@@ -440,7 +440,7 @@ Task_Ps2
 - 读取 PS2 控制输入。
 
 Task_Led
-- 呼吸灯状态显示。
+- LED 状态闪烁显示。
 ```
 
 要求：
@@ -479,13 +479,13 @@ USART3 DMA RX ISR
 
 ### 12. LED
 
-当前 LED 用作呼吸灯。
+当前 LED 用作状态闪烁。
 
 要求：
 
 - LED 应由独立任务或定时器 PWM 控制。
 
-- 呼吸灯用于表示系统运行状态。
+- 状态闪烁用于表示系统运行状态。
 
 - 不应占用底盘控制主循环。
 
@@ -504,7 +504,7 @@ USART3 DMA RX ISR
 
     - 急停。
 
-当前只要求实现基础呼吸灯，不需要过度扩展状态机。
+当前只要求实现基础状态闪烁，不需要过度扩展状态机。
 
 ---
 
@@ -591,7 +591,7 @@ esp01s_comm
 - 负责 ESP01S 通信。
 
 led_status
-- 负责呼吸灯与状态灯。
+- 负责状态闪烁与状态灯。
 ```
 
 要求：
@@ -797,7 +797,7 @@ control_mode
 
 2. USART1 调试输出正常。
 
-3. LED 呼吸灯正常。
+3. LED 状态闪烁正常。
 
 4. ADC1 IN0/IN1/IN2 原始采样正常（顺序：电池电压、左电流、右电流）。
 
@@ -983,12 +983,12 @@ Codex 在修改本项目时必须遵守：
 - 编码器基础参数：11 PPR, 4x 正交, 减速比 56, 2464 counts/rev
 - 电机驱动芯片：TB67H450FNG（双路 PWM 输入模式）
 
-#### 仍待实测确认（当前为 TODO 占位值，不可用于实际控制/上报）
+#### 仍待实测确认或继续校准
 
-以下参数在 `App/chassis/chassis_config.h` 中当前值为 0.0f 或 1.0f 占位，未标定前不得用于速度换算、里程计算或电压/电流上报：
+以下参数在 `App/chassis/chassis_config.h` 中仍需结合实物继续确认。已写入物理测量初值的参数可以用于受控联调，但不得当作最终标定值：
 
 - 轮径 `CHASSIS_WHEEL_RADIUS_M`
-- 轮距 `CHASSIS_WHEEL_BASE_M`
+- 轮距 `CHASSIS_WHEEL_BASE_M` 当前按 0.178 m 物理测量值初始化，仍需通过原地旋转实测修正有效轮距。
 - 电池电压分压比 `ADC_MONITOR_BATTERY_DIVIDER`
 - 电流采样零点 `ADC_MONITOR_CURRENT_ZERO_V` 与比例系数 `ADC_MONITOR_CURRENT_V_PER_A`
 - 编码器供电电压（3.3V 或 5.0V，以当前原理图供电为准）

@@ -9,7 +9,7 @@ extern "C" {
 #define CHASSIS_ENCODER_PERIOD_MS        10U
 #define CHASSIS_ADC_PERIOD_MS            20U
 #define CHASSIS_IMU_PERIOD_MS            20U
-#define CHASSIS_LED_PERIOD_MS            1U
+#define CHASSIS_LED_PERIOD_MS            50U
 #define CHASSIS_PS2_PERIOD_MS            20U
 #define CHASSIS_ESP01S_PERIOD_MS         5U
 #define UPPER_UART_TASK_PERIOD_MS        5U
@@ -24,14 +24,23 @@ extern "C" {
 #define CHASSIS_OPENLOOP_FULL_MPS        0.5f /* Open-loop command mapped to CHASSIS_PWM_MAX_PERMILLE. */
 #define CHASSIS_ANGULAR_EPSILON_RPS      0.0001f
 
-#define PS2_LINEAR_MAX_MPS               0.35f
+#define PS2_LINEAR_MAX_MPS               CHASSIS_MAX_LINEAR_MPS
 #define PS2_ANGULAR_MAX_RPS              1.0f
 #define PS2_AXIS_CENTER                  128
 #define PS2_AXIS_DEADZONE                18
-#define PS2_ENABLE_BUTTON_MASK           0x08U /* R1: hold-to-drive */
+#define PS2_MANUAL_CANCEL_THRESHOLD      0.12f
+#define PS2_MACRO_90_DEG_MS              1571U /* Timed short spin seed; calibrate on hardware. */
+#define PS2_MACRO_360_DEG_MS             6283U /* Timed long spin seed; calibrate on hardware. */
+#define PS2_MACRO_L1_MASK                0x04U
+#define PS2_MACRO_R1_MASK                0x08U
+#define PS2_MACRO_L2_MASK                0x01U
+#define PS2_MACRO_R2_MASK                0x02U
+
+#define CHASSIS_SPEED_RAMP_MPS2          1.0f
+#define CHASSIS_ANGULAR_RAMP_RPS2        2.0f
 
 #define CHASSIS_WHEEL_RADIUS_M           0.035f
-#define CHASSIS_WHEEL_BASE_M             0.0f /* TODO: set after the mechanical frame is finalized. */
+#define CHASSIS_WHEEL_BASE_M             0.178f /* Measured: 21.0 cm outside width - 3.2 cm tire width. */
 #define CHASSIS_MIN_ENCODER_DT_MS        1U
 #define CHASSIS_MAX_ENCODER_DT_MS        100U
 

@@ -1,5 +1,6 @@
 # Local IDE and agent state
 .idea/
+.claude/
 .codex
 .learnings/
 outputs/

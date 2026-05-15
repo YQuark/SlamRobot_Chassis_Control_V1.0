@@ -7,6 +7,9 @@
 
 #define PS2_FRAME_LEN 9U
 #define PS2_RETRY_LIMIT 3U
+#define PS2_CLK_HALF_PERIOD_US 10U
+#define PS2_BYTE_GAP_US 20U
+#define PS2_FRAME_GAP_US 30U
 
 typedef struct
 {
@@ -26,7 +29,44 @@ static const uint8_t ps2_poll_frame[PS2_FRAME_LEN] = {
 static ps2_control_state_t ps2_state;
 static uint8_t ps2_rx[PS2_FRAME_LEN];
 static uint8_t swap_cmd_dat;
-static uint8_t reconfig_count;
+static uint8_t last_btn2;
+static uint8_t macro_active;
+static uint8_t macro_button;
+static float macro_angular_z;
+static uint32_t macro_end_ms;
+
+static void Ps2Control_CopyState(ps2_control_state_t *dst, const ps2_control_state_t *src)
+{
+  uint32_t primask;
+
+  if (dst == 0 || src == 0)
+  {
+    return;
+  }
+
+  primask = __get_PRIMASK();
+  __disable_irq();
+  *dst = *src;
+  __set_PRIMASK(primask);
+}
+
+static void Ps2Control_IncrementRxOk(void)
+{
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  ps2_state.rx_ok_count++;
+  __set_PRIMASK(primask);
+}
+
+static void Ps2Control_IncrementRxFail(void)
+{
+  uint32_t primask = __get_PRIMASK();
+
+  __disable_irq();
+  ps2_state.rx_fail_count++;
+  __set_PRIMASK(primask);
+}
 
 static void Ps2Control_DwtDelayInit(void)
 {
@@ -127,19 +167,19 @@ static uint8_t Ps2Control_TransferByte(uint8_t tx)
   for (uint8_t bit = 0x01U; bit != 0U; bit <<= 1U)
   {
     Ps2Control_SetCmd(((tx & bit) != 0U) ? 1U : 0U);
-    Ps2Control_SetClk(1U);
-    Ps2Control_DelayUs(5U);
+    Ps2Control_DelayUs(PS2_CLK_HALF_PERIOD_US);
     Ps2Control_SetClk(0U);
-    Ps2Control_DelayUs(5U);
-    Ps2Control_SetClk(1U);
+    Ps2Control_DelayUs(PS2_CLK_HALF_PERIOD_US);
 
     if (Ps2Control_ReadDat() != 0U)
     {
       rx |= bit;
     }
+
+    Ps2Control_SetClk(1U);
+    Ps2Control_DelayUs(PS2_CLK_HALF_PERIOD_US);
   }
 
-  Ps2Control_DelayUs(16U);
   Ps2Control_SetCmd(1U);
   return rx;
 }
@@ -147,7 +187,7 @@ static uint8_t Ps2Control_TransferByte(uint8_t tx)
 static void Ps2Control_Send(const uint8_t *tx, uint8_t *rx, uint8_t len)
 {
   Ps2Control_SetCs(0U);
-  Ps2Control_DelayUs(20U);
+  Ps2Control_DelayUs(PS2_FRAME_GAP_US);
 
   for (uint8_t i = 0U; i < len; ++i)
   {
@@ -156,11 +196,11 @@ static void Ps2Control_Send(const uint8_t *tx, uint8_t *rx, uint8_t len)
     {
       rx[i] = value;
     }
-    Ps2Control_DelayUs(16U);
+    Ps2Control_DelayUs(PS2_BYTE_GAP_US);
   }
 
   Ps2Control_SetCs(1U);
-  Ps2Control_DelayUs(20U);
+  Ps2Control_DelayUs(PS2_FRAME_GAP_US);
 }
 
 static uint8_t Ps2Control_HandshakeOk(const uint8_t *rx)
@@ -240,13 +280,10 @@ static uint8_t Ps2Control_ReadSample(ps2_sample_t *sample)
   Ps2Control_Send(ps2_poll_frame, ps2_rx, (uint8_t)sizeof(ps2_poll_frame));
   if (Ps2Control_HandshakeOk(ps2_rx) == 0U)
   {
-    if (reconfig_count < PS2_RETRY_LIMIT)
-    {
-      Ps2Control_ConfigAnalog();
-      reconfig_count++;
-    }
+    Ps2Control_IncrementRxFail();
     return 0U;
   }
+  Ps2Control_IncrementRxOk();
 
   sample->mode = ps2_rx[1];
   sample->btn1 = (uint8_t)~ps2_rx[3];
@@ -257,7 +294,6 @@ static uint8_t Ps2Control_ReadSample(ps2_sample_t *sample)
     sample->right_y = ps2_rx[6];
     sample->left_x = ps2_rx[7];
     sample->left_y = ps2_rx[8];
-    reconfig_count = 0U;
   }
   else
   {
@@ -265,11 +301,6 @@ static uint8_t Ps2Control_ReadSample(ps2_sample_t *sample)
     sample->right_y = PS2_AXIS_CENTER;
     sample->left_x = PS2_AXIS_CENTER;
     sample->left_y = PS2_AXIS_CENTER;
-    if (reconfig_count < PS2_RETRY_LIMIT)
-    {
-      Ps2Control_ConfigAnalog();
-      reconfig_count++;
-    }
   }
 
   return 1U;
@@ -315,13 +346,53 @@ static void Ps2Control_SubmitCommand(float linear_x, float angular_z)
     .timestamp_ms = osKernelGetTickCount(),
   };
 
-  if (linear_x == 0.0f && angular_z == 0.0f)
-  {
-    ControlManager_ClearSource(CONTROL_SOURCE_PS2);
-    return;
-  }
-
   (void)ControlManager_SetCommand(&cmd);
+}
+
+static uint8_t Ps2Control_ManualInputActive(float linear_x, float angular_z)
+{
+  float abs_linear = (linear_x < 0.0f) ? -linear_x : linear_x;
+  float abs_angular = (angular_z < 0.0f) ? -angular_z : angular_z;
+
+  return (abs_linear > PS2_MANUAL_CANCEL_THRESHOLD ||
+          abs_angular > PS2_MANUAL_CANCEL_THRESHOLD) ? 1U : 0U;
+}
+
+static uint8_t Ps2Control_StartMacro(uint8_t pressed, uint32_t now_ms)
+{
+  if ((pressed & PS2_MACRO_L1_MASK) != 0U)
+  {
+    macro_active = 1U;
+    macro_button = PS2_MACRO_L1_MASK;
+    macro_angular_z = PS2_ANGULAR_MAX_RPS;
+    macro_end_ms = now_ms + PS2_MACRO_360_DEG_MS;
+    return 1U;
+  }
+  if ((pressed & PS2_MACRO_R1_MASK) != 0U)
+  {
+    macro_active = 1U;
+    macro_button = PS2_MACRO_R1_MASK;
+    macro_angular_z = -PS2_ANGULAR_MAX_RPS;
+    macro_end_ms = now_ms + PS2_MACRO_360_DEG_MS;
+    return 1U;
+  }
+  if ((pressed & PS2_MACRO_L2_MASK) != 0U)
+  {
+    macro_active = 1U;
+    macro_button = PS2_MACRO_L2_MASK;
+    macro_angular_z = PS2_ANGULAR_MAX_RPS;
+    macro_end_ms = now_ms + PS2_MACRO_90_DEG_MS;
+    return 1U;
+  }
+  if ((pressed & PS2_MACRO_R2_MASK) != 0U)
+  {
+    macro_active = 1U;
+    macro_button = PS2_MACRO_R2_MASK;
+    macro_angular_z = -PS2_ANGULAR_MAX_RPS;
+    macro_end_ms = now_ms + PS2_MACRO_90_DEG_MS;
+    return 1U;
+  }
+  return 0U;
 }
 
 void Ps2Control_Init(void)
@@ -332,7 +403,11 @@ void Ps2Control_Init(void)
   ps2_state.left_y = PS2_AXIS_CENTER;
   ps2_state.right_x = PS2_AXIS_CENTER;
   ps2_state.right_y = PS2_AXIS_CENTER;
-  reconfig_count = 0U;
+  last_btn2 = 0U;
+  macro_active = 0U;
+  macro_button = 0U;
+  macro_angular_z = 0.0f;
+  macro_end_ms = 0U;
 
   swap_cmd_dat = 0U;
   Ps2Control_ConfigurePins();
@@ -348,69 +423,104 @@ void Ps2Control_Init(void)
 void Ps2Control_Update(void)
 {
   ps2_sample_t sample;
+  ps2_control_state_t next_state;
   float linear_x = 0.0f;
   float angular_z = 0.0f;
-  uint8_t drive_enabled;
+  uint8_t pressed_btn2;
+  uint8_t command_active;
+  uint32_t now_ms = osKernelGetTickCount();
 
   if (Ps2Control_ReadSample(&sample) == 0U)
   {
-    ps2_state.online = 0U;
-    ps2_state.drive_enabled = 0U;
-    ps2_state.linear_x = 0.0f;
-    ps2_state.angular_z = 0.0f;
+    Ps2Control_CopyState(&next_state, &ps2_state);
+    next_state.online = 0U;
+    next_state.drive_enabled = 0U;
+    next_state.macro_active = 0U;
+    next_state.macro_button = 0U;
+    next_state.linear_x = 0.0f;
+    next_state.angular_z = 0.0f;
+    Ps2Control_CopyState(&ps2_state, &next_state);
+    macro_active = 0U;
+    macro_button = 0U;
+    macro_angular_z = 0.0f;
     ControlManager_ClearSource(CONTROL_SOURCE_PS2);
     return;
   }
 
-  drive_enabled = ((sample.btn2 & PS2_ENABLE_BUTTON_MASK) != 0U) ? 1U : 0U;
   linear_x = -Ps2Control_NormalizeAxis(sample.left_y) * PS2_LINEAR_MAX_MPS;
   angular_z = Ps2Control_NormalizeAxis(sample.right_x) * PS2_ANGULAR_MAX_RPS;
-
-  if ((sample.btn1 & 0x10U) != 0U)
-  {
-    linear_x = PS2_LINEAR_MAX_MPS;
-  }
-  else if ((sample.btn1 & 0x40U) != 0U)
-  {
-    linear_x = -PS2_LINEAR_MAX_MPS;
-  }
-  if ((sample.btn1 & 0x80U) != 0U)
-  {
-    angular_z = PS2_ANGULAR_MAX_RPS;
-  }
-  else if ((sample.btn1 & 0x20U) != 0U)
-  {
-    angular_z = -PS2_ANGULAR_MAX_RPS;
-  }
+  pressed_btn2 = (uint8_t)(sample.btn2 & (uint8_t)~last_btn2);
+  last_btn2 = sample.btn2;
 
   linear_x = Ps2Control_ClampFloat(linear_x, PS2_LINEAR_MAX_MPS);
   angular_z = Ps2Control_ClampFloat(angular_z, PS2_ANGULAR_MAX_RPS);
 
-  ps2_state.online = 1U;
-  ps2_state.analog_mode = Ps2Control_IsAnalogMode(sample.mode);
-  ps2_state.drive_enabled = drive_enabled;
-  ps2_state.btn1 = sample.btn1;
-  ps2_state.btn2 = sample.btn2;
-  ps2_state.left_x = sample.left_x;
-  ps2_state.left_y = sample.left_y;
-  ps2_state.right_x = sample.right_x;
-  ps2_state.right_y = sample.right_y;
-  ps2_state.linear_x = (drive_enabled != 0U) ? linear_x : 0.0f;
-  ps2_state.angular_z = (drive_enabled != 0U) ? angular_z : 0.0f;
+  if (Ps2Control_ManualInputActive(linear_x, angular_z) != 0U)
+  {
+    macro_active = 0U;
+    macro_button = 0U;
+  }
+  else if (macro_active != 0U)
+  {
+    if ((int32_t)(now_ms - macro_end_ms) >= 0)
+    {
+      macro_active = 0U;
+      macro_button = 0U;
+      macro_angular_z = 0.0f;
+    }
+    else
+    {
+      angular_z = macro_angular_z;
+    }
+  }
+  else
+  {
+    (void)Ps2Control_StartMacro(pressed_btn2, now_ms);
+    if (macro_active == 0U)
+    {
+      macro_button = 0U;
+    }
+    if (macro_active != 0U)
+    {
+      angular_z = macro_angular_z;
+    }
+  }
 
-  if (drive_enabled == 0U)
+  command_active = (Ps2Control_ManualInputActive(linear_x, angular_z) != 0U ||
+                    macro_active != 0U) ? 1U : 0U;
+
+  if (command_active == 0U)
+  {
+    linear_x = 0.0f;
+    angular_z = 0.0f;
+  }
+
+  Ps2Control_CopyState(&next_state, &ps2_state);
+  next_state.online = 1U;
+  next_state.analog_mode = Ps2Control_IsAnalogMode(sample.mode);
+  next_state.drive_enabled = command_active;
+  next_state.btn1 = sample.btn1;
+  next_state.btn2 = sample.btn2;
+  next_state.left_x = sample.left_x;
+  next_state.left_y = sample.left_y;
+  next_state.right_x = sample.right_x;
+  next_state.right_y = sample.right_y;
+  next_state.macro_active = macro_active;
+  next_state.macro_button = macro_button;
+  next_state.linear_x = linear_x;
+  next_state.angular_z = angular_z;
+  Ps2Control_CopyState(&ps2_state, &next_state);
+
+  if (command_active == 0U)
   {
     ControlManager_ClearSource(CONTROL_SOURCE_PS2);
     return;
   }
 
-  Ps2Control_SubmitCommand(ps2_state.linear_x, ps2_state.angular_z);
+  Ps2Control_SubmitCommand(linear_x, angular_z);
 }
 
 void Ps2Control_GetState(ps2_control_state_t *state)
 {
-  if (state != 0)
-  {
-    *state = ps2_state;
-  }
+  Ps2Control_CopyState(state, &ps2_state);
 }

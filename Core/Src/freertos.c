@@ -84,7 +84,7 @@ const osThreadAttr_t imuUpdateTask_attributes = {
 const osThreadAttr_t ledTask_attributes = {
   .name = "led",
   .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityLow,
+  .priority = (osPriority_t) osPriorityBelowNormal,
 };
 
 const osThreadAttr_t upperUartTask_attributes = {
